@@ -282,6 +282,7 @@ loop:
 			*out++ = difference & 0xFF;
 			*out++ = (difference>>8) & 0xFF;
 		}
+		goto loop;
 	}
 	
 	word_definition {
