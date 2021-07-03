@@ -1,0 +1,8 @@
+# ignored files
+picoUF2
+program.c
+program.list
+*.elf
+*.o
+*.uf2
+*.geany
