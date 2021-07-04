@@ -28,12 +28,18 @@ enum {
 	fithDup,
 	fithJump,
 	fithGreaterThanJump,
+	fithGreaterThanEqualJump,
+	fithLessThanJump,
+	fithLessThanEqualJump,
+	fithEqualJump,
+	fithNotEqualJump,
 	
 };
 
 enum{
 	BLOCK_FUNCTION,
 	BLOCK_CJUMP,
+	BLOCK_ELSE,
 };
 
 typedef struct blockInfo {
@@ -43,12 +49,12 @@ typedef struct blockInfo {
 
 
 typedef struct fithLexState {
-	u8  *outBufferStart;
-	u8  *outBufferCursor;
-	s32  globalsBufferSize;
-	u32  inBlockStateStack;
-	s32  blockStackIndex;
-	blockInfo blockStack[8];
+	u8        *outBufferStart;
+	u8        *outBufferCursor;
+	s32        globalsBufferSize;
+	u32        inBlockStateStack;
+	s32        blockStackIndex;
+	blockInfo *blockStack;
 } fithLexState;
 
 typedef struct fithRegisters {
@@ -73,11 +79,17 @@ void  fithPrepareExecute(u8 *codeToExec);
 
 
 u8  __bss_end__[4];
+static blockInfo blockStackMem[32];
 fithRegisters fithExecutionState;
-
 static avlNode      *wordTreeRoot;
 static fithLexState  fls = {
-	__bss_end__, 0, 0 };
+	.outBufferStart    = __bss_end__,
+	.outBufferCursor   = 0,
+	.globalsBufferSize = 0,
+	.inBlockStateStack = 0,
+	.blockStackIndex   = 0,
+	.blockStack        = blockStackMem,
+};
 
 void
 fithRegistersInit(void)
@@ -279,24 +291,86 @@ loop:
 			s32 difference = out - jout;
 			*(jout-2)= difference & 0xFF;
 			*(jout-1) = (difference>>8) & 0xFF;
+		} else if (blockType == BLOCK_ELSE) {
+			u8 *jout = fls.blockStack[fls.blockStackIndex].savedCursor;
+			s32 difference = out - jout;
+			*(jout+1)= difference & 0xFF;
+			*(jout+2) = (difference>>8) & 0xFF;
+			// wrap up else chain if there
+			while (fls.blockStack[fls.blockStackIndex-1].blockType==BLOCK_ELSE)
+			{
+				jout = fls.blockStack[--fls.blockStackIndex].savedCursor;
+				difference = out - jout;
+				*(jout+1)= difference & 0xFF;
+				*(jout+2) = (difference>>8) & 0xFF;
+				fls.inBlockStateStack = fls.inBlockStateStack >> 1;
+			}
 		} else if (blockType == BLOCK_FUNCTION) {
 			// output return
 			*out++ = fithReturn;
 			// move start forward so we save the function we created
+			prints("size of word:");
+			printWord(out - fls.outBufferStart);
+			prints("\n");
 			fls.outBufferStart  = out;
 		}
 		fls.inBlockStateStack = fls.inBlockStateStack >> 1;
 		goto loop;
 	}
 	
+	"}else{" {
+		s32 blockType = fls.blockStack[--fls.blockStackIndex].blockType;
+		if (blockType == BLOCK_CJUMP)
+		{
+			*out = fithJump; // ouput unconditional jump
+			out += 3;
+			u8 *jout = fls.blockStack[fls.blockStackIndex].savedCursor;
+			s32 difference = out - jout; // fill in conditional jump
+			*(jout-2)= difference & 0xFF;
+			*(jout-1) = (difference>>8) & 0xFF;
+			// add block for else
+			fls.blockStack[fls.blockStackIndex].savedCursor = out - 3;
+			fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_ELSE;
+		} else {
+			prints("}else{ is not matched with a conditional jump.\n");
+		}
+		goto loop;
+	}
+	
 	">{" {
 		// compare top two items, jump if result is less than or equal
 		*out = fithGreaterThanJump;
+		finishOutCJUMP:
 		out += 3;
 		fls.blockStack[fls.blockStackIndex].savedCursor = out;
 		fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_CJUMP;
 		fls.inBlockStateStack = (fls.inBlockStateStack << 1) | 1;
 		goto loop;
+	}
+	
+	">={" {
+		*out = fithGreaterThanEqualJump;
+		goto finishOutCJUMP;
+	}
+	
+	"<{" {
+		*out = fithLessThanJump;
+		goto finishOutCJUMP;
+	}
+	
+	"<={" {
+		*out = fithLessThanEqualJump;
+		goto finishOutCJUMP;
+	}
+	
+	"=={" {
+		*out = fithEqualJump;
+		goto finishOutCJUMP;
+	}
+	
+	"!={" {
+		*out = fithNotEqualJump;
+		goto finishOutCJUMP;
 	}
 	
 	"`walk" {

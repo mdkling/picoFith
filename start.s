@@ -687,6 +687,12 @@ fithVMjumpTable:
 .word fithDup
 .word fithJump
 .word fithGreaterThanJump
+.word fithGreaterThanEqualJump
+.word fithLessThanJump
+.word fithLessThanEqualJump
+.word fithEqualJump
+.word fithNotEqualJump
+
 
 .balign 4
 .code 16
@@ -912,6 +918,87 @@ fithGreaterThanJump:
 1:  ldr  r0, [r4]
 	adds r5, 3
 	NEXT_INSTRUCTION
+
+.thumb_func
+fithGreaterThanEqualJump:
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	subs r4, 8
+	ldr  r1, [r4, #4]
+	cmp  r1, r0
+	bge  1f
+	adds r5, r2
+1:  ldr  r0, [r4]
+	adds r5, 3
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLessThanJump:
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	subs r4, 8
+	ldr  r1, [r4, #4]
+	cmp  r1, r0
+	blt  1f
+	adds r5, r2
+1:  ldr  r0, [r4]
+	adds r5, 3
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLessThanEqualJump:
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	subs r4, 8
+	ldr  r1, [r4, #4]
+	cmp  r1, r0
+	ble  1f
+	adds r5, r2
+1:  ldr  r0, [r4]
+	adds r5, 3
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithEqualJump:
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	subs r4, 8
+	ldr  r1, [r4, #4]
+	cmp  r1, r0
+	beq  1f
+	adds r5, r2
+1:  ldr  r0, [r4]
+	adds r5, 3
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithNotEqualJump:
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	subs r4, 8
+	ldr  r1, [r4, #4]
+	cmp  r1, r0
+	bne  1f
+	adds r5, r2
+1:  ldr  r0, [r4]
+	adds r5, 3
+	NEXT_INSTRUCTION
+
 
 .balign 4
 .code 16
