@@ -25,16 +25,30 @@ enum {
 	fithMod,
 	fithReturn,
 	fithCallFunc,
-	
-	
+	fithDup,
+	fithJump,
+	fithGreaterThanJump,
 	
 };
+
+enum{
+	BLOCK_FUNCTION,
+	BLOCK_CJUMP,
+};
+
+typedef struct blockInfo {
+	u8  *savedCursor;
+	s32  blockType;	
+} blockInfo;
 
 
 typedef struct fithLexState {
 	u8  *outBufferStart;
 	u8  *outBufferCursor;
 	s32  globalsBufferSize;
+	u32  inBlockStateStack;
+	s32  blockStackIndex;
+	blockInfo blockStack[8];
 } fithLexState;
 
 typedef struct fithRegisters {
@@ -148,7 +162,7 @@ writeInteger(u8 *out, u32 val)
 
 /*!re2c                              // start of re2c block
 	
-	scm = "\\" [^\n\x00]*;
+	scm = "\\" [^\x00]*;
 	wsp = ([ \n\t\r] | scm)+; // removed \v
 	// integer literals
 	dec = [0-9]+;
@@ -178,7 +192,7 @@ fithLexLine(u8 *line)
 	u8  *out;
 	u8  *YYCURSOR = line;
 	
-	if (fls.outBufferCursor != 0)
+	if (fls.inBlockStateStack != 0)
 	{
 		out = fls.outBufferCursor;
 	} else {
@@ -202,7 +216,7 @@ loop:
 	
 	[\x00] {
 		//~ if (out != fls.outBufferStart)
-		if (fls.outBufferCursor == 0)
+		if (fls.inBlockStateStack == 0)
 		{
 			// execute code
 			// this is a function of tos, esp, rsp, globals, ip
@@ -258,16 +272,40 @@ loop:
 	}
 	
 	"}" {
-		// output return
-		*out++ = fithReturn;
-		// move start forward so we save the function we created
-		fls.outBufferStart  = out;
-		fls.outBufferCursor = 0;
+		s32 blockType = fls.blockStack[--fls.blockStackIndex].blockType;
+		if (blockType == BLOCK_CJUMP)
+		{
+			u8 *jout = fls.blockStack[fls.blockStackIndex].savedCursor;
+			s32 difference = out - jout;
+			*(jout-2)= difference & 0xFF;
+			*(jout-1) = (difference>>8) & 0xFF;
+		} else if (blockType == BLOCK_FUNCTION) {
+			// output return
+			*out++ = fithReturn;
+			// move start forward so we save the function we created
+			fls.outBufferStart  = out;
+		}
+		fls.inBlockStateStack = fls.inBlockStateStack >> 1;
 		goto loop;
 	}
 	
-	"walk" {
+	">{" {
+		// compare top two items, jump if result is less than or equal
+		*out = fithGreaterThanJump;
+		out += 3;
+		fls.blockStack[fls.blockStackIndex].savedCursor = out;
+		fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_CJUMP;
+		fls.inBlockStateStack = (fls.inBlockStateStack << 1) | 1;
+		goto loop;
+	}
+	
+	"`walk" {
 		walkNodes(wordTreeRoot);
+		goto loop;
+	}
+	
+	"`dup" {
+		*out++ = fithDup;
 		goto loop;
 	}
 	
@@ -281,6 +319,10 @@ loop:
 			*out++ = fithCallFunc;
 			*out++ = difference & 0xFF;
 			*out++ = (difference>>8) & 0xFF;
+		} else {
+			prints("Word: \"");
+			uartTX(start, YYCURSOR - start);
+			prints("\" is not defined.\n");
 		}
 		goto loop;
 	}
@@ -291,9 +333,8 @@ loop:
 			start,     // pointer to string
 			YYCURSOR - start - 1,  // length of string (255 max)
 			out );   // value to be stored
-		//~ printWord((s32)retNode);
-		fls.outBufferCursor = out;
-		//~ PRINT_STRING("\n");
+		fls.inBlockStateStack = (fls.inBlockStateStack << 1) | 1;
+		fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_FUNCTION;
 		if (retNode) {
 			PRINT_STRING("word already existed\n");
 		} else {

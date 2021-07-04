@@ -96,36 +96,36 @@ DELAY_COUNT = 0x00100000
 END_OF_RAM = 0x20042000
 
 ;@ Section Macros
-.macro  put32 dst, val
+.macro put32 dst, val
 	ldr r0,=dst
 	ldr r1,=val
 	str r1,[r0]
 .endm
 
-.macro  PUSH_TOS
+.macro PUSH_TOS
 	stm  r4!, {r0}
 .endm
 
-.macro  POP_TOS
+.macro POP_TOS
 	subs r4, 4
 	ldr  r0, [r4]
 .endm
 
-.macro  PUSH_IP
+.macro PUSH_IP
 	stm  r6!, {r5}
 .endm
 
-.macro  POP_IP
+.macro POP_IP
 	subs r6, 4
 	ldr  r5, [r6]
 .endm
 
-.macro  POP_SCATCH1
+.macro POP_SCATCH1
 	subs r4, 4
 	ldr  r1, [r4]
 .endm
 
-.macro  NEXT_INSTRUCTION
+.macro NEXT_INSTRUCTION
 	ldrb r1, [r5]
 	lsls r2, r1, 2
 	ldr  r2, [r7, r2]
@@ -684,6 +684,9 @@ fithVMjumpTable:
 .word fithMod
 .word fithReturn
 .word fithCallFunc
+.word fithDup
+.word fithJump
+.word fithGreaterThanJump
 
 .balign 4
 .code 16
@@ -836,36 +839,35 @@ fithDiv:
 	POP_SCATCH1
 	ldr  r2, = SIO_BASE
 	str  r1, [r2, #SIO_SIGNED_DIVIDEND]
-	str  r0, [r2, #SIO_SIGNED_DIVISOR]
-	b 1f
-1:	b 1f
-1:	b 1f
-1:	b 1f
-1:	
-	ldr r0, [r2, #SIO_QUOTIENT]
-	adds r5, 1
-	NEXT_INSTRUCTION
+	str  r0, [r2, #SIO_SIGNED_DIVISOR] ;@ now takes 8 cycles to finish
+	movs r0, r2			;@ 1
+	adds r5, 1			;@ 2
+	ldrb r1, [r5]		;@ 4
+	lsls r2, r1, 2		;@ 5
+	ldr  r2, [r7, r2]	;@ 7
+	movs r0, r0			;@ 8
+	ldr  r0, [r0, #SIO_QUOTIENT]
+	bx   r2
 
 .thumb_func
 fithMod:
 	POP_SCATCH1
 	ldr  r2, = SIO_BASE
 	str  r1, [r2, #SIO_SIGNED_DIVIDEND]
-	str  r0, [r2, #SIO_SIGNED_DIVISOR]
-	b 1f
-1:	b 1f
-1:	b 1f
-1:	b 1f
-1:
-	ldr  r0, [r2, #SIO_REMAINDER]
-	adds r5, 1
-	NEXT_INSTRUCTION
+	str  r0, [r2, #SIO_SIGNED_DIVISOR] ;@ now takes 8 cycles to finish
+	movs r0, r2			;@ 1
+	adds r5, 1			;@ 2
+	ldrb r1, [r5]		;@ 4
+	lsls r2, r1, 2		;@ 5
+	ldr  r2, [r7, r2]	;@ 7
+	movs r0, r0			;@ 8
+	ldr  r0, [r0, #SIO_REMAINDER]
+	bx   r2
 
 .thumb_func
 fithReturn:
 	POP_IP
 	NEXT_INSTRUCTION
-
 
 .thumb_func
 fithCallFunc:
@@ -879,7 +881,37 @@ fithCallFunc:
 	adds r5, r2
 	NEXT_INSTRUCTION
 
+.thumb_func
+fithDup:
+	PUSH_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
 
+.thumb_func
+fithJump: ;@ unconditional jump
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	adds r5, r2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithGreaterThanJump:
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	subs r4, 8
+	ldr  r1, [r4, #4]
+	cmp  r1, r0
+	bgt  1f
+	adds r5, r2
+1:  ldr  r0, [r4]
+	adds r5, 3
+	NEXT_INSTRUCTION
 
 .balign 4
 .code 16

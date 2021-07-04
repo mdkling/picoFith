@@ -37,8 +37,8 @@ memory.o : memory.c Makefile
 avl.o : avl.c Makefile
 	$(ARMGNU)-gcc $(COPS) -mthumb -c avl.c -o avl.o
 
-program.c: program_src.c
-	re2c -W -i program_src.c -o program.c
+program.c: program_src.c Makefile
+	re2c -W -i -s program_src.c -o program.c
 
 testRun: program.uf2
 	sudo mount -t drvfs d: /mnt/d
