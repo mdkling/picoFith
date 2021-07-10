@@ -289,6 +289,7 @@ reset:
 .balign 4
 .code 16
 .thumb_func
+.global REBOOT
 .type REBOOT, %function
 REBOOT:
 	;@~ ldr r0,=PSM_WDSEL ;@ ENABLE MASS RESET
@@ -999,7 +1000,6 @@ fithNotEqualJump:
 	adds r5, 3
 	NEXT_INSTRUCTION
 
-
 .balign 4
 .code 16
 .thumb_func
@@ -1010,22 +1010,23 @@ mainLoop:
 	bl memsys5Init
 	bl fithRegistersInit
 	;@ end software init
-	ldr  r7, =120*60
+	;@~ ldr  r7, =120*60
 1:
-	bl getCharacter
-	cmp r1, 0
-	beq 2f ;@ nothing in DMA, goto end
-	bl processChar
-	cmp r5, 0
-	beq 1b ;@ no line to process check for another character
-	bl processLine
+	bl   getCharacter
+	cmp  r1, 0
+	beq  2f ;@ nothing in DMA, goto end
+	bl   processChar
+	cmp  r5, 0
+	beq  1b ;@ no line to process check for another character
+	bl   processLine
 	movs r0, 0x3E ;@ carrot
-	bl print1Byte
-	b 1b
+	bl   print1Byte
+	b    1b
 2:
 	wfi
-	subs r7, 1
-	bne 1b
+	b   1b
+	;@~ subs r7, 1
+	;@~ bne 1b
 	pop  {pc}
 
 

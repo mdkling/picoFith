@@ -42,6 +42,13 @@ enum{
 	BLOCK_ELSE,
 };
 
+enum{
+	WORD_FUNCTION,
+	WORD_LOCAL,
+	WORD_GLOBAL,
+	WORD_CONST,
+};
+
 typedef struct blockInfo {
 	u8  *savedCursor;
 	s32  blockType;	
@@ -52,6 +59,7 @@ typedef struct fithLexState {
 	u8        *outBufferStart;
 	u8        *outBufferCursor;
 	s32        globalsBufferSize;
+	avlNode   *wordTreeRoot;
 	u32        inBlockStateStack;
 	s32        blockStackIndex;
 	blockInfo *blockStack;
@@ -74,6 +82,7 @@ void  uartTX(u8 *sting, s32 size);
 void  prints(u8 *sting);
 void  printWord(s32 word);
 void  fithPrepareExecute(u8 *codeToExec);
+void  REBOOT(void);
 
 #define PRINT_STRING(string) uartTX(string, sizeof string - 1)
 
@@ -81,10 +90,10 @@ void  fithPrepareExecute(u8 *codeToExec);
 u8  __bss_end__[4];
 static blockInfo blockStackMem[32];
 fithRegisters fithExecutionState;
-static avlNode      *wordTreeRoot;
 static fithLexState  fls = {
 	.outBufferStart    = __bss_end__,
 	.outBufferCursor   = 0,
+	.wordTreeRoot      = 0,
 	.globalsBufferSize = 0,
 	.inBlockStateStack = 0,
 	.blockStackIndex   = 0,
@@ -187,14 +196,48 @@ writeInteger(u8 *out, u32 val)
 	mangled_string_lit = ['] ([^'\x00\x03] | ([\\] [']))* "\x00";
 	char_lit = [`] ([^`\x03] | ([\\] [`]))* [`];
 	integer = "-"? (dec | hex);
+	wordOperators = [@#$^~;:!?];
 	word = [a-zA-Z_] [a-zA-Z_0-9?!-]*;
 	word_definition = word "{";
+	word_increment = word "++";
 	function_call_addr = "@" word ;
 	function_definition = word ":";
 
 	
 */                                   // end of re2c block
 
+#include "parser.c"
+
+static u8*
+builtInWords(u8 *out, u8 *YYCURSOR)
+{
+	u8  *YYMARKER;
+	
+	/*!re2c                          // start of re2c block **/
+	re2c:define:YYCTYPE = "u8";      //   configuration that defines YYCTYPE
+	re2c:yyfill:enable  = 0;         //   configuration that turns off YYFILL
+
+	* {
+		return 0;
+	}
+	
+	"walk" {
+		walkNodes(fls.wordTreeRoot);
+		return out;
+	}
+	
+	"dup" {
+		*out++ = fithDup;
+		return out;
+	}
+	
+	"reboot" {
+		REBOOT();
+		return out;
+	}
+	
+	*/                               // end of re2c block
+}
 
 void
 fithLexLine(u8 *line)
@@ -204,7 +247,7 @@ fithLexLine(u8 *line)
 	u8  *out;
 	u8  *YYCURSOR = line;
 	
-	if (fls.inBlockStateStack != 0)
+	if (fls.blockStackIndex != 0)
 	{
 		out = fls.outBufferCursor;
 	} else {
@@ -228,7 +271,7 @@ loop:
 	
 	[\x00] {
 		//~ if (out != fls.outBufferStart)
-		if (fls.inBlockStateStack == 0)
+		if (fls.blockStackIndex == 0)
 		{
 			// execute code
 			// this is a function of tos, esp, rsp, globals, ip
@@ -303,7 +346,6 @@ loop:
 				difference = out - jout;
 				*(jout+1)= difference & 0xFF;
 				*(jout+2) = (difference>>8) & 0xFF;
-				fls.inBlockStateStack = fls.inBlockStateStack >> 1;
 			}
 		} else if (blockType == BLOCK_FUNCTION) {
 			// output return
@@ -314,7 +356,6 @@ loop:
 			prints("\n");
 			fls.outBufferStart  = out;
 		}
-		fls.inBlockStateStack = fls.inBlockStateStack >> 1;
 		goto loop;
 	}
 	
@@ -344,7 +385,6 @@ loop:
 		out += 3;
 		fls.blockStack[fls.blockStackIndex].savedCursor = out;
 		fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_CJUMP;
-		fls.inBlockStateStack = (fls.inBlockStateStack << 1) | 1;
 		goto loop;
 	}
 	
@@ -373,41 +413,44 @@ loop:
 		goto finishOutCJUMP;
 	}
 	
-	"`walk" {
-		walkNodes(wordTreeRoot);
-		goto loop;
-	}
+	//~ "`walk" {
+		//~ walkNodes(fls.wordTreeRoot);
+		//~ goto loop;
+	//~ }
 	
-	"`dup" {
-		*out++ = fithDup;
-		goto loop;
-	}
+	//~ "`dup" {
+		//~ *out++ = fithDup;
+		//~ goto loop;
+	//~ }
 	
+	// A word can be a function or a variable. I could add different syntax
+	// for variables versus functions, but that would probably look bad?
+	// On the other hand loading and storing could be used as postfix operators.
+	// without the postfix operators we are left with more complex discrimiation
+	// between if this a global or other etc.
 	word {
-		avlNode *retNode = avl_find(
-			wordTreeRoot,     // pointer to tree
-			start,      // pointer to string
-			YYCURSOR - start);  // length of string (255 max)
-		if (retNode) {
-			s32 difference = ((u8*)retNode->value) - (out + 3);
-			*out++ = fithCallFunc;
-			*out++ = difference & 0xFF;
-			*out++ = (difference>>8) & 0xFF;
+		u8 *tmpOut = builtInWords(out, start);
+		if (tmpOut)
+		{
+			out = tmpOut;
 		} else {
-			prints("Word: \"");
-			uartTX(start, YYCURSOR - start);
-			prints("\" is not defined.\n");
+			out = parseWord(out, start, YYCURSOR);
 		}
 		goto loop;
 	}
 	
+	//~ word_increment {
+		//~ *out++ = fithDup;
+		//~ goto loop;
+	//~ }
+	
 	word_definition {
 		avlNode *retNode = avl_insert(
-			&wordTreeRoot,   // pointer memory holding address of tree
+			&fls.wordTreeRoot,   // pointer memory holding address of tree
 			start,     // pointer to string
 			YYCURSOR - start - 1,  // length of string (255 max)
 			out );   // value to be stored
-		fls.inBlockStateStack = (fls.inBlockStateStack << 1) | 1;
+		//~ fls.inBlockStateStack = (fls.inBlockStateStack << 1) | 1;
 		fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_FUNCTION;
 		if (retNode) {
 			PRINT_STRING("word already existed\n");

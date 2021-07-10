@@ -1,0 +1,18 @@
+cadd{
+	dup 12 >{
+	3 +
+	}else{ dup 8 >{
+	2 +
+	}else{ dup 4 >{
+	1 +
+	}else{
+	10 +
+	}
+}
+
+fact{ 
+	dup 1 >{             \ if{ 1 (or 0) \just leave on stack
+		dup 1 - fact  *  \ next number down - get its factorial
+	}                    \ and mult - leavin ans on stack
+}
+

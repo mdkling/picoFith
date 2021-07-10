@@ -37,7 +37,7 @@ memory.o : memory.c Makefile
 avl.o : avl.c Makefile
 	$(ARMGNU)-gcc $(COPS) -mthumb -c avl.c -o avl.o
 
-program.c: program_src.c Makefile
+program.c: program_src.c Makefile parser.c
 	re2c -W -i -s program_src.c -o program.c
 
 testRun: program.uf2
