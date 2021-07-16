@@ -209,6 +209,9 @@ writeInteger(u8 *out, u32 val)
 #include "parser.c"
 #include "pio.c"
 
+void
+configPioAsm(void);
+
 static u8*
 builtInWords(u8 *out, u8 *YYCURSOR)
 {
@@ -239,6 +242,7 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	
 	"config-pio" {
 		configPIO();
+		configPioAsm();
 		return out;
 	}
 	

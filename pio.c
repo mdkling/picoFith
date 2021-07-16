@@ -45,10 +45,11 @@ configPIO(void)
 	deviceCtrl = (u32*)GPIO_22_CTRL;
 	*deviceCtrl = 6;
 	deviceCtrl = (u32*)PIO_0_SM0_CLK;
-	*deviceCtrl = (20480<<16);
+	//~ *deviceCtrl = (20480<<16);
+	*deviceCtrl = (80<<16);
 	// set wrap top and bottom
 	deviceCtrl = (u32*)PIO_0_SM0_EXEC;
-	*deviceCtrl = (7<<12)|(0<<7);
+	*deviceCtrl = (1<<17)|(7<<12)|(0<<7);
 	// merge RX into TX FIFO
 	// enable auto pull
 	deviceCtrl = (u32*)PIO_0_SM0_SHIFTCRTL;
@@ -68,7 +69,7 @@ configPIO(void)
 	
 	// start up state machine
 	deviceCtrl = (u32*)PIO_0_CTRL;
-	*deviceCtrl = (1<<0)|(1<<4)|(1<<8); // reset and enable state machine 0
+	*deviceCtrl = (1<<0)/*|(1<<4)|(1<<8)*/; // reset and enable state machine 0
 	deviceCtrl = (u32*)PIO_0_SM0_INSTR;
 	*deviceCtrl = 0xE087, // 0: set pindirs, 3
 	prints(" delay print so maybe the next instruction will work!\n");
@@ -138,7 +139,7 @@ outputSound(void)
 {
 	volatile u32 *outputFifo;
 	volatile u32 *deviceCtrl;
-	u32 count = 10000;
+	u32 count = 1000000;
 	outputFifo = (u32*)PIO_0_SM0_TX;
 	//~ deviceCtrl = (u32*)PIO_0_SM0_INSTRADDR;
 	deviceCtrl = (u32*)PIO_0_SM0_INSTR;

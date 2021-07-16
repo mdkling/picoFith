@@ -212,7 +212,7 @@ sysTickISR:
 	movs r2, 1
 	str  r2, [r0]
 	lsls r3,r2,25
-	ldr  r0, =SIO_GPIO_OUT_XOR
+	;@ldr  r0, =SIO_GPIO_OUT_XOR
 	str  r3, [r0]
 1:
 	bx lr
@@ -330,8 +330,10 @@ setup:
 .thumb_func
 .type resetIOBank, %function
 resetIOBank:
-	lsls r1,r2,#10
 	lsls r3,r2,#5
+	lsls r1,r2,#10
+	adds r3, r1
+	lsls r1,r2,#11
 	adds r3, r1
 	ldr  r0, =RESETS_RESET_CLR
 	str  r3, [r0]
@@ -345,17 +347,19 @@ resetIOBank:
 	str  r3, [r0]
 	ldr  r0, =SIO_GPIO_OUT_CLR
 	str  r3, [r0]
-	movs r1, 5
+	
+	;@ movs r1, 5 GPIO control
+	movs r1, 7 ;@ PIO 1 control
 	ldr  r0, =IO_GPIO25_CTRL_RW
 	str  r1, [r0]
-	ldr  r0, =SIO_GPIO_OE_SET
+	;@ ldr  r0, =SIO_GPIO_OE_SET
 	;@ lsls r1,r2,20
 	;@ adds r3, r1
 	;@ lsls r1,r2,21
 	;@ adds r3, r1
 	;@ lsls r1,r2,22
 	;@ adds r3, r1
-	str  r3, [r0]
+	;@ str  r3, [r0]
 	bx   lr
 
 ;@~ .balign 4
@@ -1553,13 +1557,19 @@ INPUT_BUFFERS:
 
 
 ;@ constants
-PIO_0_BASE       = 0x50200000
-PIO_0_CTRL       = 0x00
-PIO_0_FIFOSTATUS = 0x04
-PIO_0_FIFOLVL    = 0x0C
-PIO_0_SM0_TX     = 0x10
-PIO_0_INSTR_MEM  = 0x48
-
+PIO_1_BASE          = 0x50300000
+PIO_1_CTRL          = 0x00
+PIO_1_FIFOSTATUS    = 0x04
+PIO_1_FIFOLVL       = 0x0C
+PIO_1_SM0_TX        = 0x10
+PIO_1_INSTR_MEM     = 0x48
+PIO_1_SM0_BASE      = PIO_1_BASE + 0xC8
+PIO_1_SM0_CLK       = 0x00
+PIO_1_SM0_EXEC      = 0x04
+PIO_1_SM0_SHIFTCRTL = 0x08
+PIO_1_SM0_INSTRADDR = 0x0C
+PIO_1_SM0_INSTR     = 0x10
+PIO_1_SM0_PINCTRL   = 0x14
 
 .balign 4
 .code 16
@@ -1567,12 +1577,78 @@ PIO_0_INSTR_MEM  = 0x48
 .global configPioAsm
 .type configPioAsm, %function
 configPioAsm: ;@ no arguments
-	push {lr}
+	;@push {lr}
+	;@ configure state machine 0 on PIO 1
+	ldr  r3, =PIO_1_SM0_BASE
+	;@ldr  r0, =((20480*3)<<16)
+	ldr  r0, =((337)<<16)
+	str  r0, [r3, #PIO_1_SM0_CLK]
+	ldr  r0, =(0x1f<<12)|(0<<7) ;@ (1<<17)|
+	str  r0, [r3, #PIO_1_SM0_EXEC]
+	;@ ldr  r0, =(1<<30)|(1<<17)
+	;@ str  r0, [r3, #PIO_1_SM0_SHIFTCRTL]
+	ldr  r0, =(1<<26)|(25<<5)
+	str  r0, [r3, #PIO_1_SM0_PINCTRL]
 	
+	;@ program instructions
+	subs r3, #(32*4)
+	adr  r2, pioInstructions
+	movs r1, 0
+1:
+	ldr  r0, [r2, r1]
+	str  r0, [r3, r1]
+	adds r1, 4
+	cmp  r1, 128
+	bne  1b
 	
+	;@ enable state machine
+	subs r3, 0x48
+	movs r0, 1
+	str  r0, [r3, #0]
 	
-	
-	pop  {pc}
+	;@pop  {pc}
+	bx lr
+
+
+.balign 4
+.ltorg
+
+pioInstructions:
+;@ .word 0xE081 ;@ 00 set pindirs, 1
+;@ .word 0xFF01 ;@ 00 set pindirs, 1
+;@ .word 0x0001 ;@ 31 jmp  goto 01 [31]
+.word 0xE081 ;@ 00 set pindirs, 1
+.word 0xE05F ;@ 01 set y, 31 START_OF_SET_LOOP
+.word 0xFF3F ;@ 02 set x, 31
+.word 0xFF01 ;@ 03 set pins, 1 [31]
+.word 0xFF01 ;@ 04 set pins, 1 [31]
+.word 0xFF01 ;@ 05 set pins, 1 [31]
+.word 0xFF01 ;@ 06 set pins, 1 [31]
+.word 0xFF01 ;@ 07 set pins, 1 [31]
+.word 0xFF01 ;@ 08 set pins, 1 [31]
+.word 0xFF01 ;@ 09 set pins, 1 [31]
+.word 0xFF01 ;@ 10 set pins, 1 [31]
+.word 0xFF01 ;@ 11 set pins, 1 [31]
+.word 0xFF01 ;@ 12 set pins, 1 [31]
+.word 0xFF01 ;@ 13 set pins, 1 [31]
+.word 0x1F43 ;@ 14 jmp x-- goto 03 [31]
+.word 0x1F82 ;@ 15 jmp y-- goto 02 [31]
+.word 0xE05F ;@ 16 set y, 31 START_OF_UNSET_LOOP
+.word 0xFF3F ;@ 17 set x, 31
+.word 0xFF00 ;@ 18 set pins, 0 [31]
+.word 0xFF00 ;@ 19 set pins, 0 [31]
+.word 0xFF00 ;@ 20 set pins, 0 [31]
+.word 0xFF00 ;@ 21 set pins, 0 [31]
+.word 0xFF00 ;@ 22 set pins, 0 [31]
+.word 0xFF00 ;@ 23 set pins, 0 [31]
+.word 0xFF00 ;@ 24 set pins, 0 [31]
+.word 0xFF00 ;@ 25 set pins, 0 [31]
+.word 0xFF00 ;@ 26 set pins, 0 [31]
+.word 0xFF00 ;@ 27 set pins, 0 [31]
+.word 0xFF00 ;@ 28 set pins, 0 [31]
+.word 0x1F52 ;@ 29 jmp x-- goto 18 [31]
+.word 0x1F91 ;@ 30 jmp y-- goto 17 [31]
+.word 0x0001 ;@ 31 jmp  goto 01 [31]
 
 ;@~ charClasses:
 ;@~ ;@ 00   0   1   2   3   4   5   6   7   8  \t  \n  11  12  \r  14  15
