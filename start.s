@@ -330,7 +330,9 @@ setup:
 .thumb_func
 .type resetIOBank, %function
 resetIOBank:
+	lsls r1,r2,#10
 	lsls r3,r2,#5
+	adds r3, r1
 	ldr  r0, =RESETS_RESET_CLR
 	str  r3, [r0]
 	ldr  r0, =RESETS_RESET_DONE_RW
@@ -347,6 +349,12 @@ resetIOBank:
 	ldr  r0, =IO_GPIO25_CTRL_RW
 	str  r1, [r0]
 	ldr  r0, =SIO_GPIO_OE_SET
+	;@ lsls r1,r2,20
+	;@ adds r3, r1
+	;@ lsls r1,r2,21
+	;@ adds r3, r1
+	;@ lsls r1,r2,22
+	;@ adds r3, r1
 	str  r3, [r0]
 	bx   lr
 
@@ -1542,6 +1550,29 @@ INPUT_BUFFERS:
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+
+;@ constants
+PIO_0_BASE       = 0x50200000
+PIO_0_CTRL       = 0x00
+PIO_0_FIFOSTATUS = 0x04
+PIO_0_FIFOLVL    = 0x0C
+PIO_0_SM0_TX     = 0x10
+PIO_0_INSTR_MEM  = 0x48
+
+
+.balign 4
+.code 16
+.thumb_func
+.global configPioAsm
+.type configPioAsm, %function
+configPioAsm: ;@ no arguments
+	push {lr}
+	
+	
+	
+	
+	pop  {pc}
 
 ;@~ charClasses:
 ;@~ ;@ 00   0   1   2   3   4   5   6   7   8  \t  \n  11  12  \r  14  15

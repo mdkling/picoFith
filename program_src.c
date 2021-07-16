@@ -85,7 +85,7 @@ void  fithPrepareExecute(u8 *codeToExec);
 void  REBOOT(void);
 
 #define PRINT_STRING(string) uartTX(string, sizeof string - 1)
-
+#define ARRAY_SIZE(a) ((sizeof a)/(sizeof a[0]))
 
 u8  __bss_end__[4];
 static blockInfo blockStackMem[32];
@@ -207,6 +207,7 @@ writeInteger(u8 *out, u32 val)
 */                                   // end of re2c block
 
 #include "parser.c"
+#include "pio.c"
 
 static u8*
 builtInWords(u8 *out, u8 *YYCURSOR)
@@ -233,6 +234,16 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	
 	"reboot" {
 		REBOOT();
+		return out;
+	}
+	
+	"config-pio" {
+		configPIO();
+		return out;
+	}
+	
+	"send-sound" {
+		outputSound();
 		return out;
 	}
 	
