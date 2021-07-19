@@ -15,8 +15,8 @@ program.uf2 : program.elf picoUF2
 picoUF2: main.cpp
 	g++ main.cpp -O1 -o picoUF2
 
-program.elf : memmap.ld start.o program.o memory.o avl.o
-	$(ARMGNU)-ld $(LOPS) -T memmap.ld start.o memory.o program.o avl.o -o program.elf
+program.elf : memmap.ld start.o program.o memory.o avl.o aaTree.o
+	$(ARMGNU)-ld $(LOPS) -T memmap.ld start.o memory.o program.o avl.o aaTree.o -o program.elf
 	$(ARMGNU)-objdump -D program.elf > program.list
 
 clean:
@@ -36,6 +36,9 @@ memory.o : memory.c Makefile
 
 avl.o : avl.c Makefile
 	$(ARMGNU)-gcc $(COPS) -mthumb -c avl.c -o avl.o
+
+aaTree.o : aaTree.c Makefile
+	$(ARMGNU)-gcc $(COPS) -mthumb -c aaTree.c -o aaTree.o
 
 program.c: program_src.c Makefile parser.c pio.c
 	re2c -W -i -s program_src.c -o program.c

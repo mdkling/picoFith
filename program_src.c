@@ -2,7 +2,17 @@
 #include "localTypes.h"
 #include "memory.h"
 #include "avl.h"
+typedef struct aaNode aaNode;
+typedef struct aaNode {
+	aaNode *next[2];
+	void    *value;
+	s8       level;
+	u8       keyLen;
+	u8       key[2];
+} aaNode;
 
+aaNode *
+aa_Insert(aaNode *root, u8 *key, u32 keyLen, void *val);
 enum {
 	fithConstant0,
 	fithConstant1,
@@ -60,6 +70,7 @@ typedef struct fithLexState {
 	u8        *outBufferCursor;
 	s32        globalsBufferSize;
 	avlNode   *wordTreeRoot;
+	aaNode   *wordTreeRoot2;
 	u32        inBlockStateStack;
 	s32        blockStackIndex;
 	blockInfo *blockStack;
@@ -120,6 +131,19 @@ walkNodes(avlNode *root)
 	uartTX(root->key, root->keyLen);
 	PRINT_STRING("\n");
 	walkNodes(root->next[1]);
+}
+
+void
+walkNodes2(aaNode *root)
+{
+	if (root == 0)
+	{
+		return;
+	}
+	walkNodes2(root->next[0]);
+	uartTX(root->key, root->keyLen);
+	PRINT_STRING("\n");
+	walkNodes2(root->next[1]);
 }
 
 static s32
@@ -227,6 +251,7 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	
 	"walk" {
 		walkNodes(fls.wordTreeRoot);
+		walkAA(fls.wordTreeRoot2);
 		return out;
 	}
 	
@@ -460,20 +485,23 @@ loop:
 	//~ }
 	
 	word_definition {
-		avlNode *retNode = avl_insert(
-			&fls.wordTreeRoot,   // pointer memory holding address of tree
-			start,     // pointer to string
-			YYCURSOR - start - 1,  // length of string (255 max)
-			out );   // value to be stored
-		//~ fls.inBlockStateStack = (fls.inBlockStateStack << 1) | 1;
-		fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_FUNCTION;
-		if (retNode) {
-			PRINT_STRING("word already existed\n");
-		} else {
-			prints("saving start of word: ");
-			uartTX(start, YYCURSOR - start);
-			PRINT_STRING("\n");
-		}
+		prints("about to save word!\n");
+		fls.wordTreeRoot2 = aa_Insert(fls.wordTreeRoot2, start, YYCURSOR - start - 1, out);
+		printWord((s32)fls.wordTreeRoot2);
+		prints(" after saving word!\n");
+		//~ avlNode *retNode = avl_insert(
+			//~ &fls.wordTreeRoot,   // pointer memory holding address of tree
+			//~ start,     // pointer to string
+			//~ YYCURSOR - start - 1,  // length of string (255 max)
+			//~ out );   // value to be stored
+		//~ fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_FUNCTION;
+		//~ if (retNode) {
+			//~ PRINT_STRING("word already existed\n");
+		//~ } else {
+			//~ prints("saving start of word: ");
+			//~ uartTX(start, YYCURSOR - start);
+			//~ PRINT_STRING("\n");
+		//~ }
 		goto loop;
 	}
 	
