@@ -119,6 +119,164 @@ u32 squareData[] =  {
 	0xFFFFFFFF,
 };
 
+u32 aiffPulse[] = {
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x7FFB7FFB,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+	0x80058005,
+};
+
+u32 wavPulse[] = {
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0xFB7FFB7F,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+	0x05800580,
+};
+
 void
 writeSound(u32 sound)
 {
@@ -137,6 +295,76 @@ readFifoStatus(void)
 
 void
 outputSound(void)
+{
+	volatile u32 *outputFifo;
+	volatile u32 *deviceCtrl;
+	u32 count = 1000000;
+	outputFifo = (u32*)PIO_0_SM0_TX;
+	//~ deviceCtrl = (u32*)PIO_0_SM0_INSTRADDR;
+	deviceCtrl = (u32*)PIO_0_SM0_INSTR;
+	*deviceCtrl = 0x0007, // entry point
+	deviceCtrl = (u32*)PIO_0_FIFOSTATUS;
+	printWord(*deviceCtrl);
+	printWord(readFifoStatus());
+	prints("\n");
+	//~ *outputFifo = soundData[0];
+	writeSound(soundData[0]);
+	printWord(readFifoStatus());
+	prints("\n");
+	//~ *outputFifo = soundData[1];
+	writeSound(soundData[1]);
+	printWord(readFifoStatus());
+	prints("\n");
+	//~ *outputFifo = soundData[2];
+	writeSound(soundData[2]);
+	printWord(readFifoStatus());
+	prints("\n");
+	//~ *outputFifo = soundData[3];
+	writeSound(soundData[3]);
+	printWord(readFifoStatus());
+	prints("\n");
+	//~ *outputFifo = soundData[4];
+	writeSound(soundData[4]);
+	printWord(readFifoStatus());
+	prints("\n");
+	//~ *outputFifo = soundData[5];
+	writeSound(soundData[5]);
+	//~ writeSound(soundData[6]);
+	//~ writeSound(soundData[7]);
+	//~ writeSound(soundData[8]);
+	//~ writeSound(soundData[9]);
+	//~ writeSound(soundData[10]);
+	//~ writeSound(soundData[5]);
+	//~ writeSound(soundData[6]);
+	//~ writeSound(soundData[7]);
+	//~ writeSound(soundData[8]);
+	//~ writeSound(soundData[9]);
+	//~ writeSound(soundData[10]);
+	//~ printWord(*deviceCtrl);
+	printWord(readFifoStatus());
+	prints("\n");
+	
+	//~ volatile u32 *fifoStatus;
+	//~ fifoStatus = (u32*)PIO_0_FIFOLVL;
+	deviceCtrl = (u32*)PIO_0_SM0_INSTRADDR;
+	printWord(*deviceCtrl);
+		prints("\n");
+	while (count!=0)
+	{
+		while ( (readFifoStatus()&0xF) > 7) { }
+		*outputFifo = soundData[count&0xF];
+		//~ *outputFifo = 0xFFFFFFFF;
+		count--;
+	}
+	printWord(*deviceCtrl);
+		prints("\n");
+	prints("sound has been sent!\n");
+}
+
+
+
+void
+playWaveform(void)
 {
 	volatile u32 *outputFifo;
 	volatile u32 *deviceCtrl;

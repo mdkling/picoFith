@@ -275,6 +275,11 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 		outputSound();
 		return out;
 	}
+
+	"play-wave" {
+		playWaveform();
+		return out;
+	}
 	
 	*/                               // end of re2c block
 }
