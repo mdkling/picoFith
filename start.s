@@ -581,6 +581,28 @@ setZero: ;@ r0 = dst r1 = size
 .balign 4
 .code 16
 .thumb_func
+.global disableZeroizeDMA
+.type disableZeroizeDMA, %function
+disableZeroizeDMA: ;@ no inputs
+	ldr  r1,=DMA_2_BASE + ATOMIC_CLR ;@ base reg
+	movs r0, 1
+	str  r0,[r1, #DMA2_CTRL]
+	bx lr
+	
+.balign 4
+.code 16
+.thumb_func
+.global enableZeroizeDMA
+.type enableZeroizeDMA, %function
+enableZeroizeDMA: ;@ no inputs
+	ldr  r1,=DMA_2_BASE + ATOMIC_SET ;@ base reg
+	movs r0, 1
+	str  r0,[r1, #DMA2_CTRL]
+	bx lr
+
+.balign 4
+.code 16
+.thumb_func
 .type configSysTick, %function
 configSysTick:
 	;@ Section SysTick 
@@ -1651,113 +1673,113 @@ pioInstructions:
 .word 0x0001 ;@ 31 jmp  goto 01 [31]
 
 ;@ node struct definition
-nodeNext0    = 0
-nodeNext1    = 4
-nodeValue    = 8
-nodeLevel    = 12
-nodeKeyLen   = 13
-nodeKeyStart = 14
+;@~ nodeNext0    = 0
+;@~ nodeNext1    = 4
+;@~ nodeValue    = 8
+;@~ nodeLevel    = 12
+;@~ nodeKeyLen   = 13
+;@~ nodeKeyStart = 14
 
-.balign 4
-.code 16
-.thumb_func
-.global aa_Insert
-.type aa_Insert, %function
-aa_Insert: ;@ r0: pointer to tree r1: pointer to key r2: keyLen r3: value
-	mov  r8, r5
-	adr  r5, nilNode
-	cmp  r0, r5
-	mov  r5, r8
-	beq  makeNode
-	cmp  r0, 0
-	beq  makeNode
-	push {r4, r5, r6, r7, lr}
-	movs r4, r0
-	adds r4, nodeKeyStart
-	movs r7, 0
-1:
-	ldrb r5, [r1, r7]
-	ldrb r6, [r4, r7]
-	subs r5, r6 ;@ return value is r5 if not equal to zero
-	bne  1f
-	adds r7, 1
-	cmp  r7, r2
-	blt  1b
-	ldrb r6, [r0, #nodeKeyLen]
-	subs r5, r2, r6 ;@ return value is r2 - r7->keyLen
-	bne  1f
-	str  r3, [r0, #nodeValue]
-	pop  {r4, r5, r6, r7, pc}
-1:
-	lsrs r5, 31
-	lsls r5, 2
-	adds r4, r0, r5
-	ldr  r0, [r4]
-	bl   aa_Insert
-	str  r0, [r4]
-	subs r0, r4, r5
-	bl   skew
-	bl   split
-	pop  {r4, r5, r6, r7, pc}
+;@~ .balign 4
+;@~ .code 16
+;@~ .thumb_func
+;@~ .global aa_Insert
+;@~ .type aa_Insert, %function
+;@~ aa_Insert: ;@ r0: pointer to tree r1: pointer to key r2: keyLen r3: value
+	;@~ mov  r8, r5
+	;@~ adr  r5, nilNode
+	;@~ cmp  r0, r5
+	;@~ mov  r5, r8
+	;@~ beq  makeNode
+	;@~ cmp  r0, 0
+	;@~ beq  makeNode
+	;@~ push {r4, r5, r6, r7, lr}
+	;@~ movs r4, r0
+	;@~ adds r4, nodeKeyStart
+	;@~ movs r7, 0
+;@~ 1:
+	;@~ ldrb r5, [r1, r7]
+	;@~ ldrb r6, [r4, r7]
+	;@~ subs r5, r6 ;@ return value is r5 if not equal to zero
+	;@~ bne  1f
+	;@~ adds r7, 1
+	;@~ cmp  r7, r2
+	;@~ blt  1b
+	;@~ ldrb r6, [r0, #nodeKeyLen]
+	;@~ subs r5, r2, r6 ;@ return value is r2 - r7->keyLen
+	;@~ bne  1f
+	;@~ str  r3, [r0, #nodeValue]
+	;@~ pop  {r4, r5, r6, r7, pc}
+;@~ 1:
+	;@~ lsrs r5, 31
+	;@~ lsls r5, 2
+	;@~ adds r4, r0, r5
+	;@~ ldr  r0, [r4]
+	;@~ bl   aa_Insert
+	;@~ str  r0, [r4]
+	;@~ subs r0, r4, r5
+	;@~ bl   skew
+	;@~ bl   split
+	;@~ pop  {r4, r5, r6, r7, pc}
 
-.balign 4
-.code 16
-.thumb_func
-.type makeNode, %function
-makeNode: ;@ r0: pointer to tree r1: pointer to key r2: keyLen r3: value
-	mov  r12, lr
-	movs r0, r2 ;@ r0 is 0, and not needed
-	adds r0, 18
-	push {r1, r2, r3}
-	bl   zalloc ;@ r0 is now new address
-	pop  {r1, r2, r3}
-	str  r3, [r0, #nodeValue]
-	adr  r3, nilNode
-	str  r3, [r0, #nodeNext0]
-	str  r3, [r0, #nodeNext1]
-	strb r2, [r0, #nodeKeyLen]
-	movs r3, 1
-	strb r3, [r0, #nodeLevel]
-	adds r0, nodeKeyStart
-	movs r3, 0
-	strb r3, [r0, r2] ;@ null terminate
-1: ;@ copy loop
-	subs r2, 1
-	ldrb r3, [r1, r2]
-	strb r3, [r0, r2]
-	bne  1b
-	subs r0, nodeKeyStart
-	bx   r12
+;@~ .balign 4
+;@~ .code 16
+;@~ .thumb_func
+;@~ .type makeNode, %function
+;@~ makeNode: ;@ r0: pointer to tree r1: pointer to key r2: keyLen r3: value
+	;@~ mov  r12, lr
+	;@~ movs r0, r2 ;@ r0 is 0, and not needed
+	;@~ adds r0, 18
+	;@~ push {r1, r2, r3}
+	;@~ bl   zalloc ;@ r0 is now new address
+	;@~ pop  {r1, r2, r3}
+	;@~ str  r3, [r0, #nodeValue]
+	;@~ adr  r3, nilNode
+	;@~ str  r3, [r0, #nodeNext0]
+	;@~ str  r3, [r0, #nodeNext1]
+	;@~ strb r2, [r0, #nodeKeyLen]
+	;@~ movs r3, 1
+	;@~ strb r3, [r0, #nodeLevel]
+	;@~ adds r0, nodeKeyStart
+	;@~ movs r3, 0
+	;@~ strb r3, [r0, r2] ;@ null terminate
+;@~ 1: ;@ copy loop
+	;@~ subs r2, 1
+	;@~ ldrb r3, [r1, r2]
+	;@~ strb r3, [r0, r2]
+	;@~ bne  1b
+	;@~ subs r0, nodeKeyStart
+	;@~ bx   r12
 
-.balign 4
-.code 16
-.thumb_func
-.global walkAA
-.type walkAA, %function
-walkAA: ;@ r0: pointer to tree
-	push {r4, lr}
-	adr  r1, nilNode
-	cmp  r0, r1
-	beq  1f
-	movs r4, r0
-	movs r1, nodeKeyStart
-	adds r0, r4, r1
-	bl   prints
-	ldr  r0, [r4, #0]
-	bl   walkAA
-	ldr  r0, [r4, #4]
-	bl   walkAA
-1:
-	pop  {r4, pc}
+;@~ .balign 4
+;@~ .code 16
+;@~ .thumb_func
+;@~ .global walkAA
+;@~ .type walkAA, %function
+;@~ walkAA: ;@ r0: pointer to tree
+	;@~ push {r4, lr}
+	;@~ adr  r1, nilNode
+	;@~ cmp  r0, r1
+	;@~ beq  1f
+	;@~ movs r4, r0
+	;@~ movs r1, nodeKeyStart
+	;@~ adds r0, r4, r1
+	;@~ bl   prints
+	;@~ ldr  r0, [r4, #0]
+	;@~ bl   walkAA
+	;@~ ldr  r0, [r4, #4]
+	;@~ bl   walkAA
+;@~ 1:
+	;@~ pop  {r4, pc}
 
-.balign 4
-.ltorg
+;@~ .balign 4
+;@~ .ltorg
 
-nilNode:
-.word nilNode
-.word nilNode
-.word 0
-.word 0
+;@~ nilNode:
+;@~ .word nilNode
+;@~ .word nilNode
+;@~ .word 0
+;@~ .word 0
 
 
 ;@~ charClasses:
@@ -1778,73 +1800,75 @@ nilNode:
 ;@~ ;@ 70   p   q   r   s   t   u   v   w   x   y   z   {   |   }   ~ DEL
 ;@~ .byte   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
 
-;@~ .global __gnu_thumb1_case_uqi
-;@~ .thumb_func
-;@~ __gnu_thumb1_case_uqi:
-	;@~ mov     r12, r1
-	;@~ mov     r1, lr
-	;@~ lsrs    r1, r1, #1
-	;@~ lsls    r1, r1, #1
-	;@~ ldrb    r1, [r1, r0]
-	;@~ lsls    r1, r1, #1
-	;@~ add     lr, lr, r1
-	;@~ mov     r1, r12
-	;@~ bx      lr
 
-;@~ .global __gnu_thumb1_case_sqi
-;@~ .thumb_func
-;@~ __gnu_thumb1_case_sqi:
-	;@~ mov     r12, r1
-	;@~ mov     r1, lr
-	;@~ lsrs    r1, r1, #1
-	;@~ lsls    r1, r1, #1
-	;@~ ldrsb   r1, [r1, r0]
-	;@~ lsls    r1, r1, #1
-	;@~ add     lr, lr, r1
-	;@~ mov     r1, r12
-	;@~ bx      lr
+;@ ARM implementations for the compiler
+.global __gnu_thumb1_case_uqi
+.thumb_func
+__gnu_thumb1_case_uqi:
+	mov     r12, r1
+	mov     r1, lr
+	lsrs    r1, r1, #1
+	lsls    r1, r1, #1
+	ldrb    r1, [r1, r0]
+	lsls    r1, r1, #1
+	add     lr, lr, r1
+	mov     r1, r12
+	bx      lr
 
-;@~ .global __gnu_thumb1_case_uhi
-;@~ .thumb_func
-;@~ __gnu_thumb1_case_uhi:
-	;@~ push    {r0, r1}
-	;@~ mov     r1, lr
-	;@~ lsrs    r1, r1, #1
-	;@~ lsls    r0, r0, #1
-	;@~ lsls    r1, r1, #1
-	;@~ ldrh    r1, [r1, r0]
-	;@~ lsls    r1, r1, #1
-	;@~ add     lr, lr, r1
-	;@~ pop     {r0, r1}
-	;@~ bx      lr
+.global __gnu_thumb1_case_sqi
+.thumb_func
+__gnu_thumb1_case_sqi:
+	mov     r12, r1
+	mov     r1, lr
+	lsrs    r1, r1, #1
+	lsls    r1, r1, #1
+	ldrsb   r1, [r1, r0]
+	lsls    r1, r1, #1
+	add     lr, lr, r1
+	mov     r1, r12
+	bx      lr
 
-;@~ .global __gnu_thumb1_case_shi
-;@~ .thumb_func
-;@~ __gnu_thumb1_case_shi:
-	;@~ push    {r0, r1}
-	;@~ mov     r1, lr
-	;@~ lsrs    r1, r1, #1
-	;@~ lsls    r0, r0, #1
-	;@~ lsls    r1, r1, #1
-	;@~ ldrsh   r1, [r1, r0]
-	;@~ lsls    r1, r1, #1
-	;@~ add     lr, lr, r1
-	;@~ pop     {r0, r1}
-	;@~ bx      lr
+.global __gnu_thumb1_case_uhi
+.thumb_func
+__gnu_thumb1_case_uhi:
+	push    {r0, r1}
+	mov     r1, lr
+	lsrs    r1, r1, #1
+	lsls    r0, r0, #1
+	lsls    r1, r1, #1
+	ldrh    r1, [r1, r0]
+	lsls    r1, r1, #1
+	add     lr, lr, r1
+	pop     {r0, r1}
+	bx      lr
 
-;@~ .global __gnu_thumb1_case_si
-;@~ .thumb_func
-;@~ __gnu_thumb1_case_si:
-	;@~ push	{r0, r1}
-	;@~ mov	r1, lr
-	;@~ adds.n	r1, r1, #2
-	;@~ lsrs	r1, r1, #2
-	;@~ lsls	r0, r0, #2
-	;@~ lsls	r1, r1, #2
-	;@~ ldr	r0, [r1, r0]
-	;@~ adds	r0, r0, r1
-	;@~ mov	lr, r0
-	;@~ pop	{r0, r1}
-	;@~ mov	pc, lr
+.global __gnu_thumb1_case_shi
+.thumb_func
+__gnu_thumb1_case_shi:
+	push    {r0, r1}
+	mov     r1, lr
+	lsrs    r1, r1, #1
+	lsls    r0, r0, #1
+	lsls    r1, r1, #1
+	ldrsh   r1, [r1, r0]
+	lsls    r1, r1, #1
+	add     lr, lr, r1
+	pop     {r0, r1}
+	bx      lr
+
+.global __gnu_thumb1_case_si
+.thumb_func
+__gnu_thumb1_case_si:
+	push	{r0, r1}
+	mov	r1, lr
+	adds.n	r1, r1, #2
+	lsrs	r1, r1, #2
+	lsls	r0, r0, #2
+	lsls	r1, r1, #2
+	ldr	r0, [r1, r0]
+	adds	r0, r0, r1
+	mov	lr, r0
+	pop	{r0, r1}
+	mov	pc, lr
 
 

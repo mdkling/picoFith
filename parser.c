@@ -29,3 +29,35 @@ parseWord(u8 *out, u8 *start, u8 *YYCURSOR)
 	}
 	return out;
 }
+
+static void
+memoryTesting(void)
+{
+	// test memory under stress
+	u8 *memory1, *memory2, *memory3;
+	// allocate 64K memory
+	memory1 = zalloc(64*1024);
+	if (memory1 == 0)
+	{
+		prints("memory1 allocation failed!\n");
+		return;
+	}
+	// now allocate another 64k
+	memory2 = zalloc(64*1024);
+	if (memory2 == 0)
+	{
+		prints("memory2 allocation failed!\n");
+		free(memory1);
+		return;
+	}
+	// now allocate another 64k
+	memory3 = realloc(memory2, 128*1024);
+	if (memory3 == 0)
+	{
+		prints("memory3 allocation failed!\n");
+		free(memory1);
+		free(memory2);
+		return;
+	}
+	
+}
