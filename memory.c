@@ -107,7 +107,7 @@ static struct Mem5Global {
   /*
   ** Memory available for allocation
   */
-  u32 szAtom;      /* Smallest possible allocation in bytes */
+  //~ u32 szAtom;      /* Smallest possible allocation in bytes */
   u32 nBlock;      /* Number of szAtom sized blocks in zPool */
   u8 *zPool;       /* Memory available to be allocated */
   Mem5DLL sentinalNode; /* Sentinal Node used in free lists */
@@ -208,12 +208,11 @@ void *zalloc(u32 nByte){
 	mem5.aCtrl[i] = iLogsize;
 
 	while( iBin>iLogsize ){
-	int newSize;
-
-	iBin--;
-	newSize = 1 << iBin;
-	mem5.aCtrl[i+newSize] = CTRL_FREE + iBin;
-	memsys5Link(MEM5DLL(i+newSize), iBin, mem5.aiFreelist);
+		int newSize;
+		iBin--;
+		newSize = 1 << iBin;
+		mem5.aCtrl[i+newSize] = CTRL_FREE + iBin;
+		memsys5Link(MEM5DLL(i+newSize), iBin, mem5.aiFreelist);
 	}
 	//~ mem5.aCtrl[i] = iLogsize;
 
@@ -228,6 +227,7 @@ void free(void *pOld){
 	//~ u32 size;
 	u32 iLogsize;
 	u32 iBlock;
+	u8 *ctrlMem = mem5.aCtrl;
 
   /* Set iBlock to the index of the block pointed to by pOld in 
   ** the array of mem5.szAtom byte blocks pointed to by mem5.zPool.
@@ -236,31 +236,22 @@ void free(void *pOld){
 	iBlock = (u32)(((u8 *)pOld-mem5.zPool)/ATOM_SIZE);
 
 	//~ iLogsize = mem5.aCtrl[iBlock] & CTRL_LOGSIZE;
-	iLogsize = mem5.aCtrl[iBlock];
+	iLogsize = ctrlMem[iBlock];
 	//~ size = (1<<iLogsize);
 	assert( iBlock+size-1<(u32)mem5.nBlock );
 
 
-	mem5.aCtrl[iBlock] = CTRL_FREE + iLogsize;
-  
+	ctrlMem[iBlock] = CTRL_FREE + iLogsize;
 	while(1){
 		u32 iBuddy;
-		u32 iPartner;
-		if( (iBlock>>iLogsize) & 1 ){
-			iBuddy = iBlock;
-			iBlock = iBlock - (1<<iLogsize);
-			iPartner = iBlock;
-		}else{
-			iBuddy = iBlock + (1<<iLogsize);
-			iPartner = iBuddy;
-			if( iBuddy>=mem5.nBlock ) break;
-		}
-		if( mem5.aCtrl[iPartner]!=(CTRL_FREE + iLogsize) ) break;
-		memsys5Unlink(MEM5DLL(iPartner), iLogsize);
+		iBuddy = iBlock ^ (1<<iLogsize);
+		if( iBuddy>=mem5.nBlock ) { break; }
+		if( ctrlMem[iBuddy]!=(CTRL_FREE + iLogsize) ) break;
+		memsys5Unlink(MEM5DLL(iBuddy), iLogsize);
 		iLogsize++;
-		mem5.aCtrl[iBlock] = CTRL_FREE + iLogsize;
-		mem5.aCtrl[iBuddy] = 0;
-		//~ size *= 2;
+		ctrlMem[iBlock&iBuddy] = CTRL_FREE + iLogsize;
+		ctrlMem[iBlock|iBuddy] = 0;
+		iBlock = iBlock&iBuddy;
 	}
 	memsys5Link(MEM5DLL(iBlock), iLogsize, mem5.aiFreelist);
 }
@@ -407,9 +398,9 @@ void *realloc2(void *pPrior, u32 nBytes){
 		{
 			// we have a new piece of memory, copy rest out
 			u8 *copyDestintation = newMemory;
-			pPrior = ((u8*)pPrior) + (sizeof(void*)*2);
-			copyDestintation = copyDestintation + (sizeof(void*)*2);
-			copyAmount = copyAmount-(sizeof(void*)*2);
+			//~ pPrior = ((u8*)pPrior) + (sizeof(void*)*2);
+			//~ copyDestintation = copyDestintation + (sizeof(void*)*2);
+			//~ copyAmount = copyAmount-(sizeof(void*)*2);
 			dmaWordForwardCopy(pPrior, copyDestintation, copyAmount);
 		} else {
 			// if we got the same memory back we are done
@@ -480,7 +471,7 @@ void memsys5Init(void){
   /* boundaries on sqlite3GlobalConfig.mnReq are enforced in sqlite3_config() */
   //~ nMinLog = memsys5Log(sqlite3GlobalConfig.mnReq);
   //~ nMinLog = 4;
-  mem5.szAtom = ATOM_SIZE;
+  //~ mem5.szAtom = ATOM_SIZE;
   //~ while( (int)sizeof(Mem5Link)>mem5.szAtom ){
     //~ mem5.szAtom = mem5.szAtom << 1;
   //~ }

@@ -89,7 +89,7 @@ void  REBOOT(void);
 
 u8  __bss_end__[4];
 static blockInfo blockStackMem[32];
-fithRegisters fithExecutionState;
+extern fithRegisters fithExecutionState;
 static fithLexState  fls = {
 	.outBufferStart    = __bss_end__,
 	.outBufferCursor   = 0,

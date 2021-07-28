@@ -6,6 +6,8 @@ XCPU = -mcpu=cortex-m0plus
 AOPS = --warn --fatal-warnings $(XCPU)
 COPS = -Wall -Wno-pointer-sign -Os -ffreestanding $(XCPU)
 LOPS = -nostdlib -nostartfiles
+#~ LOCAL_TOOL_PATH = ../tool/gcc-arm-none-eabi/bin/
+LOCAL_TOOL_PATH = 
 
 all : program.uf2 
 
@@ -16,8 +18,8 @@ picoUF2: main.cpp
 	g++ main.cpp -O1 -o picoUF2
 
 program.elf : memmap.ld start.o program.o memory.o avl.o
-	$(ARMGNU)-ld $(LOPS) -T memmap.ld start.o memory.o program.o avl.o -o program.elf
-	$(ARMGNU)-objdump -D program.elf > program.list
+	$(LOCAL_TOOL_PATH)$(ARMGNU)-ld $(LOPS) -T memmap.ld start.o memory.o program.o avl.o -o program.elf
+	$(LOCAL_TOOL_PATH)$(ARMGNU)-objdump -D program.elf > program.list
 
 clean:
 	rm -f *.o
@@ -25,17 +27,17 @@ clean:
 	rm -f *.list
 	rm -f *.uf2
 
-start.o : start.s
-	$(ARMGNU)-as $(AOPS) start.s -o start.o
+start.o : start.s Makefile
+	$(LOCAL_TOOL_PATH)$(ARMGNU)-as $(AOPS) start.s -o start.o
 
 program.o : program.c Makefile
-	$(ARMGNU)-gcc $(COPS) -mthumb -c program.c -o program.o
+	$(LOCAL_TOOL_PATH)$(ARMGNU)-gcc $(COPS) -mthumb -c program.c -o program.o
 
 memory.o : memory.c Makefile
-	$(ARMGNU)-gcc $(COPS) -mthumb -c memory.c -o memory.o
+	$(LOCAL_TOOL_PATH)$(ARMGNU)-gcc $(COPS) -mthumb -c memory.c -o memory.o
 
 avl.o : avl.c Makefile
-	$(ARMGNU)-gcc $(COPS) -mthumb -c avl.c -o avl.o
+	$(LOCAL_TOOL_PATH)$(ARMGNU)-gcc $(COPS) -mthumb -c avl.c -o avl.o
 
 program.c: program_src.c Makefile parser.c pio.c
 	re2c -W -i -s program_src.c -o program.c
