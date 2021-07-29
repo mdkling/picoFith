@@ -78,6 +78,8 @@ memoryTesting(void)
 		prints("after suspect free's\n");
 		return;
 	}
+	printWord(memory3[128*1024/4-1]);
+	prints("\n");
 	printWord(memory3[0]);
 	prints("\n");
 	printWord(memory3[1]);
@@ -85,6 +87,8 @@ memoryTesting(void)
 	printWord(memory3[64*1024/4]);
 	prints("\n");
 	printWord(memory3[64*1024/4+1]);
+	prints("\n");
+	printWord(memory3[128*1024/4-1]);
 	prints("\n");
 	
 }

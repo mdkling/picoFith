@@ -130,7 +130,6 @@ static struct Mem5Global {
 ** Assuming mem5.zPool is divided up into an array of Mem5Link
 ** structures, return a pointer to the idx-th such link.
 */
-//~ #define MEM5LINK(idx) ((Mem5Link *)(&mem5.zPool[(idx)*ATOM_SIZE]))
 #define MEM5DLL(idx) ((Mem5DLL *)(&mem5.zPool[(idx)*ATOM_SIZE]))
 
 /*
@@ -166,8 +165,8 @@ memsys5Link(Mem5DLL * restrict l, u32 iLogsize, Mem5DLL ** restrict freeList){
 */
 static u32 memsys5Size(void *p){
   u32 iSize, i;
-  i = (u32)(((u8 *)p-mem5.zPool)/ATOM_SIZE);
-  iSize = ATOM_SIZE * (1 << (mem5.aCtrl[i]&CTRL_LOGSIZE));
+  i = ((u32)((u8 *)p-mem5.zPool)/ATOM_SIZE);
+  iSize = ATOM_SIZE * (1 << mem5.aCtrl[i]);
   return iSize;
 }
 
@@ -204,11 +203,11 @@ void *zalloc(u32 nByte){
 	//~ void *memory = (void*)&mem5.zPool[i*ATOM_SIZE];
 	void *memory = (void*)freeNode;
 	setZero(memory, iFullSz);
-	i = (int)(((u8 *)memory-mem5.zPool)/ATOM_SIZE);
+	i = ((u32)((u8 *)memory-mem5.zPool)/ATOM_SIZE);
 	mem5.aCtrl[i] = iLogsize;
 
 	while( iBin>iLogsize ){
-		int newSize;
+		u32 newSize;
 		iBin--;
 		newSize = 1 << iBin;
 		mem5.aCtrl[i+newSize] = CTRL_FREE + iBin;
@@ -233,14 +232,8 @@ void free(void *pOld){
   ** the array of mem5.szAtom byte blocks pointed to by mem5.zPool.
   */
 	if (pOld==0) { return; }
-	iBlock = (u32)(((u8 *)pOld-mem5.zPool)/ATOM_SIZE);
-
-	//~ iLogsize = mem5.aCtrl[iBlock] & CTRL_LOGSIZE;
+	iBlock = ((u32)((u8 *)pOld-mem5.zPool)/ATOM_SIZE);
 	iLogsize = ctrlMem[iBlock];
-	//~ size = (1<<iLogsize);
-	assert( iBlock+size-1<(u32)mem5.nBlock );
-
-
 	ctrlMem[iBlock] = CTRL_FREE + iLogsize;
 	while(1){
 		u32 iBuddy;
@@ -381,6 +374,12 @@ void *realloc2(void *pPrior, u32 nBytes){
 			newMemory = zalloc(oldSize);
 			reallocFail = 1;
 		}
+		// we have a new piece of memory, copy old data out
+		dmaWordForwardCopy(pPrior, newMemory, copyAmount);
+		// replace memory used by allocator
+		tmpPtr = newMemory;
+		tmpPtr[0] = data1;
+		tmpPtr[1] = data2;
 		// we now have an allocation
 		newSize = memsys5Size(newMemory);
 		zeroizeTarget = newMemory;
@@ -390,22 +389,19 @@ void *realloc2(void *pPrior, u32 nBytes){
 		{
 			zeroizeAmount = newSize-oldSize;
 		}
-		// replace memory used by allocator
-		tmpPtr = newMemory;
-		tmpPtr[0] = data1;
-		tmpPtr[1] = data2;
-		if (newMemory != pPrior)
-		{
+		
+		//~ if (newMemory != pPrior)
+		//~ {
 			// we have a new piece of memory, copy rest out
-			u8 *copyDestintation = newMemory;
+			//~ u8 *copyDestintation = newMemory;
 			//~ pPrior = ((u8*)pPrior) + (sizeof(void*)*2);
 			//~ copyDestintation = copyDestintation + (sizeof(void*)*2);
 			//~ copyAmount = copyAmount-(sizeof(void*)*2);
-			dmaWordForwardCopy(pPrior, copyDestintation, copyAmount);
-		} else {
+			//~ dmaWordForwardCopy(pPrior, copyDestintation, copyAmount);
+		//~ } else {
 			// if we got the same memory back we are done
 			//~ prints("pointer reused on return!\n");
-		}
+		//~ }
 		enableZeroizeDMA();
 		setZero(zeroizeTarget, zeroizeAmount);
 		return ((u8*)newMemory) + reallocFail;
