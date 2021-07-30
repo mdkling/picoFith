@@ -363,6 +363,15 @@ outputSound(void)
 
 
 
+
+// void
+// playWaveform(void)
+// {
+// 	prints("Hello Waveform");
+// }
+
+
+
 void
 playWaveform(void)
 {
@@ -422,7 +431,7 @@ playWaveform(void)
 	while (count!=0)
 	{
 		while ( (readFifoStatus()&0xF) > 7) { }
-		*outputFifo = soundData[count&0xF];
+		*outputFifo = wavPulse[count&0x4B];
 		//~ *outputFifo = 0xFFFFFFFF;
 		count--;
 	}
