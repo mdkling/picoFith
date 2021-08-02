@@ -33,6 +33,8 @@ enum {
 	fithLessThanEqualJump,
 	fithEqualJump,
 	fithNotEqualJump,
+	fithAbs,
+	fithDrop,
 	
 };
 
@@ -53,7 +55,6 @@ typedef struct blockInfo {
 	u8  *savedCursor;
 	s32  blockType;	
 } blockInfo;
-
 
 typedef struct fithLexState {
 	u8        *outBufferStart;
@@ -87,9 +88,9 @@ void  REBOOT(void);
 #define PRINT_STRING(string) uartTX(string, sizeof string - 1)
 #define ARRAY_SIZE(a) ((sizeof a)/(sizeof a[0]))
 
-u8  __bss_end__[4];
-static blockInfo blockStackMem[32];
+extern u8  __bss_end__[4];
 extern fithRegisters fithExecutionState;
+static blockInfo blockStackMem[32];
 static fithLexState  fls = {
 	.outBufferStart    = __bss_end__,
 	.outBufferCursor   = 0,
@@ -103,7 +104,7 @@ static fithLexState  fls = {
 void
 fithRegistersInit(void)
 {
-	fithExecutionState.globals = zalloc(16);
+	fithExecutionState.globals = zalloc(32);
 	fithExecutionState.returnStack = zalloc(64);
 	fithExecutionState.bottomOfExprStack = zalloc(64);
 	fithExecutionState.currentStackPtr = fithExecutionState.bottomOfExprStack;
@@ -232,6 +233,16 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	
 	"dup" {
 		*out++ = fithDup;
+		return out;
+	}
+	
+	"drop" {
+		*out++ = fithDrop;
+		return out;
+	}
+	
+	"abs" {
+		*out++ = fithAbs;
 		return out;
 	}
 	
@@ -451,11 +462,14 @@ loop:
 	//~ }
 
 	word_definition {
+		//~ u32 timerVal = readSysTimerVal(0);
 		avlNode *retNode = avl_insert(
 			&fls.wordTreeRoot,   // pointer memory holding address of tree
 			start,     // pointer to string
 			YYCURSOR - start - 1,  // length of string (255 max)
 			out );   // value to be stored
+		//~ printWord(-readSysTimerVal(timerVal));
+		//~ prints("\n");
 		fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_FUNCTION;
 		if (retNode) {
 			PRINT_STRING("word already existed\n");

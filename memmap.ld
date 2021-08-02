@@ -29,7 +29,7 @@ SECTIONS
     .bss  : {
         . = ALIGN(4);
         __bss_start__ = .;
-        *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss*)))
+        *(SORT_BY_ALIGNMENT(.bss*))
         *(COMMON)
         . = ALIGN(4);
         __bss_end__ = .;

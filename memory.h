@@ -4,7 +4,8 @@
 #define MEM5MEMORY_HEADER
 
 // returns a pointer to memory of the requested size rounded up to a power of 2
-// the memory returned is set to all 0s
+// the memory returned is set to all 0s by the DMA. Any size above 128 bytes
+// will not be all zeros upon return, but the DMA is working hard to finish.
 void *zalloc(u32 nByte)__attribute__((malloc));
 // returns memory allocated by zalloc or realloc back to the system
 void  free(void *pOld);
@@ -17,5 +18,7 @@ void *realloc(void *pPrior, u32 nBytes);
 // being used before grabbing a new pointer. This helps on memory constrained
 // situtions where the current block could make up the larger block needed.
 void *realloc2(void *pPrior, u32 nBytes);
+
+u32 readSysTimerVal(u32 base);
 
 #endif

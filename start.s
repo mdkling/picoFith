@@ -282,6 +282,8 @@ reset:
 	ldr r1, =__bss_end__
 	subs r1, r0
 	bl setZero
+	;@~ movs r6, 255
+	;@~ bl delay
 	bl mainLoop
 	;@~ bl notmain
 	b REBOOT
@@ -620,6 +622,17 @@ configSysTick:
 	bx lr
 
 .balign 4
+.code 16
+.thumb_func
+.global readSysTimerVal
+.type readSysTimerVal, %function
+readSysTimerVal:
+	ldr  r1, =SYST_CSR
+	ldr  r1, [r1, #SYST_CVR]
+	subs r0, r1, r0
+	bx lr
+
+.balign 4
 .ltorg
 
 ;@ design doc for fith language
@@ -727,6 +740,8 @@ fithVMjumpTable:
 .word fithLessThanEqualJump
 .word fithEqualJump
 .word fithNotEqualJump
+.word fithAbs
+.word fithDrop
 
 
 .balign 4
@@ -1034,6 +1049,20 @@ fithNotEqualJump:
 	adds r5, 3
 	NEXT_INSTRUCTION
 
+.thumb_func
+fithAbs:
+	asrs r1, r0, #31
+	adds r0, r0, r1
+	eors r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithDrop:
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
 .balign 4
 .code 16
 .thumb_func
@@ -1041,7 +1070,7 @@ fithNotEqualJump:
 mainLoop:
 	push {lr}
 	;@ software init
-	bl memsys5Init
+	bl memSysInit
 	bl fithRegistersInit
 	;@ end software init
 	;@~ ldr  r7, =120*60
@@ -1671,6 +1700,7 @@ pioInstructions:
 .word 0x1F52 ;@ 29 jmp x-- goto 18 [31]
 .word 0x1F91 ;@ 30 jmp y-- goto 17 [31]
 .word 0x0001 ;@ 31 jmp  goto 01 [31]
+
 
 ;@ node struct definition
 ;@~ nodeNext0    = 0

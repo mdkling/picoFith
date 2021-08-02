@@ -18,7 +18,7 @@ picoUF2: main.cpp
 	g++ main.cpp -O1 -o picoUF2
 
 program.elf : memmap.ld start.o program.o memory.o avl.o
-	$(LOCAL_TOOL_PATH)$(ARMGNU)-ld $(LOPS) -T memmap.ld start.o memory.o program.o avl.o -o program.elf
+	$(LOCAL_TOOL_PATH)$(ARMGNU)-ld $(LOPS) -T memmap.ld start.o memory.o avl.o program.o -o program.elf
 	$(LOCAL_TOOL_PATH)$(ARMGNU)-objdump -D program.elf > program.list
 
 clean:

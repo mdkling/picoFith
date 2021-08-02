@@ -66,10 +66,10 @@
 #include "localTypes.h"
 #include "memory.h"
 
-typedef struct Mem5DLL Mem5DLL;
-struct Mem5DLL {
-  Mem5DLL *next;       /* Index of next free chunk */
-  Mem5DLL *prev;       /* Index of previous free chunk */
+typedef struct MemDLL MemDLL;
+struct MemDLL {
+  MemDLL *next;       /* Index of next free chunk */
+  MemDLL *prev;       /* Index of previous free chunk */
 };
 
 void
@@ -81,8 +81,8 @@ void enableZeroizeDMA(void);
 void prints(u8 *string);
 
 /*
-** Maximum size of any allocation is ((1<<LOGMAX)*mem5.szAtom). Since
-** mem5.szAtom is always at least 8 and 32-bit integers are used,
+** Maximum size of any allocation is ((1<<LOGMAX)*mem.szAtom). Since
+** mem.szAtom is always at least 8 and 32-bit integers are used,
 ** it is not actually possible to reach this limit.
 */
 //~ #define LOGMAX 30
@@ -90,7 +90,7 @@ void prints(u8 *string);
 #define ATOM_SIZE 32
 
 /*
-** Masks used for mem5.aCtrl[] elements.
+** Masks used for mem.aCtrl[] elements.
 */
 #define CTRL_LOGSIZE  0x1f    /* Log2 Size of this block */
 #define CTRL_FREE     0x20    /* True if not checked out */
@@ -99,47 +99,46 @@ void prints(u8 *string);
 #define assert(x) 
 /*
 ** All of the static variables used by this module are collected
-** into a single structure named "mem5".  This is to keep the
+** into a single structure named "mem".  This is to keep the
 ** static variables organized and to reduce namespace pollution
 ** when this module is combined with other in the amalgamation.
 */
-static struct Mem5Global {
-  /*
-  ** Memory available for allocation
-  */
-  //~ u32 szAtom;      /* Smallest possible allocation in bytes */
-  u32 nBlock;      /* Number of szAtom sized blocks in zPool */
-  u8 *zPool;       /* Memory available to be allocated */
-  Mem5DLL sentinalNode; /* Sentinal Node used in free lists */
-  /*
-  ** Space for tracking which blocks are checked out and the size
-  ** of each block.  One byte per block.
-  */
-  u8 *aCtrl;
-  
-  /*
-  ** Lists of free blocks.  aiFreelist[0] is a list of free blocks of
-  ** size mem5.szAtom.  aiFreelist[1] holds blocks of size szAtom*2.
-  ** aiFreelist[2] holds free blocks of size szAtom*4.  And so forth.
-  */
-  Mem5DLL *aiFreelist[LOGMAX+1];
 
-} mem5;
+typedef struct MemGlobal
+{
+	MemDLL sentinalNode; /* Sentinal Node used in free lists */
+	u32 nBlock;      /* Number of szAtom sized blocks in zPool */
+	u8 *zPool;       /* Memory available to be allocated */
+	/*
+	** Space for tracking which blocks are checked out and the size
+	** of each block.  One byte per block.
+	*/
+	u8 *aCtrl;
+	//~ MemDLL sentinalNode; /* Sentinal Node used in free lists */
+	/*
+	** Lists of free blocks.  aiFreelist[0] is a list of free blocks of
+	** size mem.szAtom.  aiFreelist[1] holds blocks of size szAtom*2.
+	** aiFreelist[2] holds free blocks of size szAtom*4.  And so forth.
+	*/
+	MemDLL *aiFreelist[LOGMAX+1];
+} MemGlobal;
+
+static MemGlobal mem;
 
 /*
-** Assuming mem5.zPool is divided up into an array of Mem5Link
+** Assuming mem.zPool is divided up into an array of memLink
 ** structures, return a pointer to the idx-th such link.
 */
-#define MEM5DLL(idx) ((Mem5DLL *)(&mem5.zPool[(idx)*ATOM_SIZE]))
+#define GET_MEMDLL(idx) ((MemDLL *)(&mem.zPool[(idx)*ATOM_SIZE]))
 
 /*
-** Unlink the chunk at mem5.aPool[i] from list it is currently
-** on.  It should be found on mem5.aiFreelist[iLogsize].
+** Unlink the chunk at mem.aPool[i] from list it is currently
+** on.  It should be found on mem.aiFreelist[iLogsize].
 */
 
 static void
-memsys5Unlink(Mem5DLL *l, u32 iLogsize){
-  Mem5DLL *next, *prev;
+memsys5Unlink(MemDLL *l){
+  MemDLL *next, *prev;
   next = l->next;
   prev = l->prev;
   prev->next = next;
@@ -147,14 +146,14 @@ memsys5Unlink(Mem5DLL *l, u32 iLogsize){
 }
 
 /*
-** Link the chunk at mem5.aPool[i] so that is on the iLogsize
+** Link the chunk at mem.aPool[i] so that is on the iLogsize
 ** free list.
 */
 static void
-memsys5Link(Mem5DLL * restrict l, u32 iLogsize, Mem5DLL ** restrict freeList){
+memsys5Link(MemDLL * restrict l, u32 iLogsize, MemDLL ** restrict freeList){
 
   l->next = freeList[iLogsize];
-  l->prev = (Mem5DLL *)&freeList[iLogsize];
+  l->prev = (MemDLL *)&freeList[iLogsize];
   freeList[iLogsize]->prev = l;
   freeList[iLogsize] = l;
 }
@@ -165,8 +164,8 @@ memsys5Link(Mem5DLL * restrict l, u32 iLogsize, Mem5DLL ** restrict freeList){
 */
 static u32 memsys5Size(void *p){
   u32 iSize, i;
-  i = ((u32)((u8 *)p-mem5.zPool)/ATOM_SIZE);
-  iSize = ATOM_SIZE * (1 << mem5.aCtrl[i]);
+  i = ((u32)((u8 *)p-mem.zPool)/ATOM_SIZE);
+  iSize = ATOM_SIZE * (1 << mem.aCtrl[i]);
   return iSize;
 }
 
@@ -174,12 +173,13 @@ static u32 memsys5Size(void *p){
 ** Return a block of memory of at least nBytes in size.
 ** Return NULL if unable.  Return NULL if nBytes==0.
 */
-void *zalloc(u32 nByte){
-	u32 i;           /* Index of a mem5.aPool[] slot */
-	u32 iBin;        /* Index into mem5.aiFreelist[] */
+void *zalloc(u32 nByte)
+{
+	u32 i;           /* Index of a mem.aPool[] slot */
+	u32 iBin;        /* Index into mem.aiFreelist[] */
 	u32 iFullSz;     /* Size of allocation rounded up to power of 2 */
 	u32 iLogsize;    /* Log2 of iFullSz/POW2_MIN */
-	Mem5DLL *freeNode;
+	MemDLL *freeNode;
 
 	// if nByte is 0 -> return 0 to be consistent with realloc
 	if (nByte==0) { return 0; }
@@ -188,32 +188,32 @@ void *zalloc(u32 nByte){
 	/* Round nByte up to the next valid power of two */
 	for(iFullSz=ATOM_SIZE,iLogsize=0; iFullSz<nByte; iFullSz*=2,iLogsize++){}
 
-	/* Make sure mem5.aiFreelist[iLogsize] contains at least one free
+	/* Make sure mem.aiFreelist[iLogsize] contains at least one free
 	** block.  If not, then split a block of the next larger power of
 	** two in order to create a new free block of size iLogsize.
 	*/
-	for(iBin=iLogsize; mem5.aiFreelist[iBin]==&mem5.sentinalNode; iBin++){}
+	for(iBin=iLogsize; mem.aiFreelist[iBin]==&mem.sentinalNode; iBin++){}
 	if( iBin>=LOGMAX ){
 		return 0;
 	}
-	freeNode = mem5.aiFreelist[iBin];
-	memsys5Unlink(freeNode, iBin);
+	// get free node from free list
+	freeNode = mem.aiFreelist[iBin];
+	// unlink the node
+	memsys5Unlink(freeNode);
 
 	// set memory to zero using DMA
-	//~ void *memory = (void*)&mem5.zPool[i*ATOM_SIZE];
-	void *memory = (void*)freeNode;
+	void *memory = freeNode;
 	setZero(memory, iFullSz);
-	i = ((u32)((u8 *)memory-mem5.zPool)/ATOM_SIZE);
-	mem5.aCtrl[i] = iLogsize;
+	i = ((u32)((u8 *)memory-mem.zPool)/ATOM_SIZE);
+	mem.aCtrl[i] = iLogsize;
 
 	while( iBin>iLogsize ){
 		u32 newSize;
 		iBin--;
 		newSize = 1 << iBin;
-		mem5.aCtrl[i+newSize] = CTRL_FREE + iBin;
-		memsys5Link(MEM5DLL(i+newSize), iBin, mem5.aiFreelist);
+		mem.aCtrl[i+newSize] = CTRL_FREE + iBin;
+		memsys5Link(GET_MEMDLL(i+newSize), iBin, mem.aiFreelist);
 	}
-	//~ mem5.aCtrl[i] = iLogsize;
 
 	/* Return a pointer to the allocated memory. */
 	return memory;
@@ -222,31 +222,31 @@ void *zalloc(u32 nByte){
 /*
 ** Free an outstanding memory allocation.
 */
-void free(void *pOld){
-	//~ u32 size;
+void free(void *pOld)
+{
 	u32 iLogsize;
 	u32 iBlock;
-	u8 *ctrlMem = mem5.aCtrl;
+	u8 *ctrlMem = mem.aCtrl;
 
   /* Set iBlock to the index of the block pointed to by pOld in 
-  ** the array of mem5.szAtom byte blocks pointed to by mem5.zPool.
+  ** the array of mem.szAtom byte blocks pointed to by mem.zPool.
   */
 	if (pOld==0) { return; }
-	iBlock = ((u32)((u8 *)pOld-mem5.zPool)/ATOM_SIZE);
+	iBlock = ((u32)((u8 *)pOld-mem.zPool)/ATOM_SIZE);
 	iLogsize = ctrlMem[iBlock];
 	ctrlMem[iBlock] = CTRL_FREE + iLogsize;
-	while(1){
+	while(1) {
 		u32 iBuddy;
 		iBuddy = iBlock ^ (1<<iLogsize);
-		if( iBuddy>=mem5.nBlock ) { break; }
-		if( ctrlMem[iBuddy]!=(CTRL_FREE + iLogsize) ) break;
-		memsys5Unlink(MEM5DLL(iBuddy), iLogsize);
+		if(iBuddy>=mem.nBlock) { break; }
+		if(ctrlMem[iBuddy]!=(CTRL_FREE + iLogsize)) { break; }
+		memsys5Unlink(GET_MEMDLL(iBuddy));
 		iLogsize++;
 		ctrlMem[iBlock&iBuddy] = CTRL_FREE + iLogsize;
 		ctrlMem[iBlock|iBuddy] = 0;
 		iBlock = iBlock&iBuddy;
 	}
-	memsys5Link(MEM5DLL(iBlock), iLogsize, mem5.aiFreelist);
+	memsys5Link(GET_MEMDLL(iBlock), iLogsize, mem.aiFreelist);
 }
 
 /*
@@ -446,52 +446,31 @@ static inline int memsys5Log(int iValue){
 ** This routine is not threadsafe.  The caller must be holding a mutex
 ** to prevent multiple threads from entering at the same time.
 */
-void memsys5Init(void){
-  s32 ii;            /* Loop counter */
-  //~ int nByte;         /* Number of bytes of memory available to this allocator */
-  u8 *zByte;         /* Memory usable by this allocator */
-  //~ int nMinLog;       /* Log base 2 of minimum allocation size in bytes */
-  u32 iOffset;       /* An offset into mem5.aCtrl[] */
+void memSysInit(void)
+{
+	s32 ii;            /* Loop counter */
+	u32 iOffset;       /* An offset into mem.aCtrl[] */
 
-  /* The size of a Mem5Link object must be a power of two.  Verify that
-  ** this is case.
-  */
-  assert( (sizeof(Mem5Link)&(sizeof(Mem5Link)-1))==0 );
+	mem.nBlock = 6950; // heapsize / (ATOM+1)
+	mem.zPool = (u8*)0x20008000; // start of memory
+	mem.aCtrl = &mem.zPool[mem.nBlock*ATOM_SIZE]; // start of control
 
-  //~ nByte = sqlite3GlobalConfig.nHeap;
-  //~ zByte = (u8*)sqlite3GlobalConfig.pHeap;
-  //~ nByte = 229364;
-  zByte = (u8*)0x20008000;
-  assert( zByte!=0 );  /* sqlite3_config() does not allow otherwise */
-
-  /* boundaries on sqlite3GlobalConfig.mnReq are enforced in sqlite3_config() */
-  //~ nMinLog = memsys5Log(sqlite3GlobalConfig.mnReq);
-  //~ nMinLog = 4;
-  //~ mem5.szAtom = ATOM_SIZE;
-  //~ while( (int)sizeof(Mem5Link)>mem5.szAtom ){
-    //~ mem5.szAtom = mem5.szAtom << 1;
-  //~ }
-
-  //~ mem5.nBlock = (nByte / (mem5.szAtom+sizeof(u8)));
-  //~ mem5.nBlock = (s32)__heapSize / 17;
-  mem5.nBlock = 6950;
-  mem5.zPool = zByte;
-  mem5.aCtrl = (u8 *)&mem5.zPool[mem5.nBlock*ATOM_SIZE];
-
-  for(ii=0; ii<LOGMAX; ii++){
-    mem5.aiFreelist[ii] = &mem5.sentinalNode;
-  }
-  mem5.aiFreelist[LOGMAX] = (Mem5DLL*)&mem5.aiFreelist[LOGMAX];
-  iOffset = 0;
-  for(ii=LOGMAX; ii>=0; ii--){
-    int nAlloc = (1<<ii);
-    if( (iOffset+nAlloc)<=mem5.nBlock ){
-      mem5.aCtrl[iOffset] = ii + CTRL_FREE;
-      memsys5Link(MEM5DLL(iOffset), ii, mem5.aiFreelist);
-      iOffset += nAlloc;
-    }
-    assert((iOffset+nAlloc)>mem5.nBlock);
-  }
-  return;
+	// initialize free lists to sentinal
+	for(ii=0; ii<LOGMAX; ii++){
+	mem.aiFreelist[ii] = &mem.sentinalNode;
+	}
+	// set sentinal free list to a value other than sentinal node
+	mem.aiFreelist[LOGMAX] = (MemDLL*)&mem.aiFreelist[LOGMAX];
+	// fill free lists with largest possible blocks of powers of 2
+	iOffset = 0;
+	for(ii=LOGMAX; ii>=0; ii--)
+	{
+		int nAlloc = (1<<ii);
+		if( (iOffset+nAlloc)<=mem.nBlock ){
+			mem.aCtrl[iOffset] = ii + CTRL_FREE;
+			memsys5Link(GET_MEMDLL(iOffset), ii, mem.aiFreelist);
+			iOffset += nAlloc;
+		}
+	}
+	return;
 }
-
