@@ -43,6 +43,7 @@ SIO_SIGNED_DIVISOR     = 0x06C
 SIO_QUOTIENT           = 0x070
 SIO_REMAINDER          = 0x074
 SIO_DIV_CSR            = 0x078
+SIO_SPINLOCK_0         = SIO_BASE + 0x100
 
 
 IO_BANK0_BASE          = 0x40014000
@@ -133,6 +134,7 @@ END_OF_RAM = 0x20042000
 .endm
 
 ;@ Section Vector Table
+.global vector_table
 vector_table:
 	b reset
 	.balign 4
@@ -1064,6 +1066,9 @@ fithDrop:
 	NEXT_INSTRUCTION
 
 .balign 4
+.ltorg
+
+.balign 4
 .code 16
 .thumb_func
 .type mainLoop, %function
@@ -1294,6 +1299,10 @@ uartTX: ;@ r0 = pointer to data start r1 = size of transmission
 .thumb_func
 .type prints, %function
 prints: ;@ r0 = pointer to null terminated string
+	;@~ ldr  r1, =SIO_SPINLOCK_0
+;@~ 1:	ldr  r2, [r1]
+	;@~ cmp  r2, #0
+	;@~ beq  1b
 	ldr r1,=UART0_BASE ;@ get address of UART
 	b 2f
 1:
@@ -1307,6 +1316,8 @@ prints: ;@ r0 = pointer to null terminated string
 	ldrb r2, [r0]
 	cmp  r2, #0
 	bne 1b
+	;@~ ldr  r1, =SIO_SPINLOCK_0
+	;@~ str  r0, [r1]
 	bx lr
 
 .balign 4
@@ -1316,6 +1327,10 @@ prints: ;@ r0 = pointer to null terminated string
 .type printWord, %function
 printWord: ;@ r0 = data to print
 	push {r4,r5,r6,lr}
+	;@~ ldr  r1, =SIO_SPINLOCK_0
+;@~ 1:	ldr  r2, [r1]
+	;@~ cmp  r2, #0
+	;@~ beq  1b
 	ldr r2,=0x0F
 	ldr r3,=UART0_BASE ;@ get address of UART
 	movs r4, r0
@@ -1336,6 +1351,8 @@ printWord: ;@ r0 = data to print
 	strb  r0,[r3, #UART0_DR] ;@ write data out the serial port
 	subs  r5, 4
 	bge   1b
+	;@~ ldr  r1, =SIO_SPINLOCK_0
+	;@~ str  r0, [r1]
 	pop {r4,r5,r6,pc}
 
 .balign 4

@@ -49,7 +49,6 @@ makeNode(u8 *key, u32 keyLen, void *value)
 {
 	avlNode *tree;
 	u32      i = 0;
-	
 	tree = AVL_MALLOC(nodeSize(keyLen));
 	tree->next[0] = tree->next[1] = 0;
 	tree->value   = value;

@@ -209,6 +209,7 @@ writeInteger(u8 *out, u32 val)
 
 #include "parser.c"
 #include "pio.c"
+#include "helperCpu.c"
 
 void
 configPioAsm(void);
@@ -260,6 +261,14 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	
 	"send-sound" {
 		outputSound();
+		return out;
+	}
+	
+	"hello-core1" {
+		helper_speak();
+		
+		
+		
 		return out;
 	}
 	
