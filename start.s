@@ -775,12 +775,15 @@ fithVMjumpTable:
 .word fithDrop
 .word fithZalloc
 .word fithFree
+.word fithRealloc
 .word fithBitwiseNot
 .word fithBitwiseAnd
 .word fithBitwiseOr
 .word fithBitwiseXor
 .word fithLshift
 .word fithRshift
+.word fithSwap
+.word fithOver
 
 
 .balign 4
@@ -1116,6 +1119,14 @@ fithFree:
 	NEXT_INSTRUCTION
 
 .thumb_func
+fithRealloc:
+	movs r1, r0
+	POP_TOS
+	bl   realloc
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
 fithBitwiseNot:
 	mvns r0, r0
 	adds r5, 1
@@ -1154,6 +1165,23 @@ fithLshift:
 fithRshift:
 	POP_SCATCH1
 	asrs r1, r0
+	movs r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithSwap:
+	POP_SCATCH1
+	PUSH_TOS
+	movs r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithOver:
+	POP_SCATCH1
+	adds r4, 4
+	PUSH_TOS
 	movs r0, r1
 	adds r5, 1
 	NEXT_INSTRUCTION
