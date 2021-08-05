@@ -35,6 +35,8 @@ enum {
 	fithNotEqualJump,
 	fithAbs,
 	fithDrop,
+	fithZalloc,
+	fithFree,
 	
 };
 
@@ -247,6 +249,16 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 		return out;
 	}
 	
+	"zalloc" {
+		*out++ = fithZalloc;
+		return out;
+	}
+	
+	"free" {
+		*out++ = fithFree;
+		return out;
+	}
+	
 	"reboot" {
 		REBOOT();
 		return out;
@@ -265,10 +277,12 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	}
 	
 	"hello-core1" {
-		helper_speak();
-		
-		
-		
+		helper_unlock();
+		return out;
+	}
+	
+	"sendMsg" {
+		helper_send();
 		return out;
 	}
 	

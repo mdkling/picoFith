@@ -121,6 +121,7 @@ typedef struct MemGlobal
 	** aiFreelist[2] holds free blocks of size szAtom*4.  And so forth.
 	*/
 	MemDLL *aiFreelist[LOGMAX+1];
+	void *cached[3];
 } MemGlobal;
 
 static MemGlobal mem;
@@ -173,20 +174,21 @@ static u32 memsys5Size(void *p){
 ** Return a block of memory of at least nBytes in size.
 ** Return NULL if unable.  Return NULL if nBytes==0.
 */
-void *zalloc(u32 nByte)
+//~ void *zalloc_internal(u32 nByte)
+static void *zalloc_internal(u32 iFullSz, u32 iLogsize)
 {
 	u32 i;           /* Index of a mem.aPool[] slot */
 	u32 iBin;        /* Index into mem.aiFreelist[] */
-	u32 iFullSz;     /* Size of allocation rounded up to power of 2 */
-	u32 iLogsize;    /* Log2 of iFullSz/POW2_MIN */
+	//~ u32 iFullSz;     /* Size of allocation rounded up to power of 2 */
+	//~ u32 iLogsize;    /* Log2 of iFullSz/POW2_MIN */
 	MemDLL *freeNode;
 
 	// if nByte is 0 -> return 0 to be consistent with realloc
-	if (nByte==0) { return 0; }
+	//~ if (nByte==0) { return 0; }
 
 
 	/* Round nByte up to the next valid power of two */
-	for(iFullSz=ATOM_SIZE,iLogsize=0; iFullSz<nByte; iFullSz*=2,iLogsize++){}
+	//~ for(iFullSz=ATOM_SIZE,iLogsize=0; iFullSz<nByte; iFullSz*=2,iLogsize++){}
 
 	/* Make sure mem.aiFreelist[iLogsize] contains at least one free
 	** block.  If not, then split a block of the next larger power of
@@ -222,7 +224,7 @@ void *zalloc(u32 nByte)
 /*
 ** Free an outstanding memory allocation.
 */
-void free(void *pOld)
+void free_internal(void *pOld)
 {
 	u32 iLogsize;
 	u32 iBlock;
@@ -231,7 +233,7 @@ void free(void *pOld)
   /* Set iBlock to the index of the block pointed to by pOld in 
   ** the array of mem.szAtom byte blocks pointed to by mem.zPool.
   */
-	if (pOld==0) { return; }
+	//~ if (pOld==0) { return; }
 	iBlock = ((u32)((u8 *)pOld-mem.zPool)/ATOM_SIZE);
 	iLogsize = ctrlMem[iBlock];
 	ctrlMem[iBlock] = CTRL_FREE + iLogsize;
@@ -249,27 +251,59 @@ void free(void *pOld)
 	memsys5Link(GET_MEMDLL(iBlock), iLogsize, mem.aiFreelist);
 }
 
-/*
-** Allocate nBytes of memory.
-*/
-//~ void *memsys5Malloc(int nBytes){
-  //~ void *p = 0;
-  //~ if( nBytes>0 ){
-    //~ p = memsys5MallocUnsafe(nBytes);
-  //~ }
-  //~ return p; 
-//~ }
+void free(void *pOld)
+{
+	if (pOld==0) { return; }
+	helper_sendMsg1(1+((u32)pOld<<8));
+}
 
-/*
-** Free memory.
-**
-** The outer layer memory allocator prevents this routine from
-** being called with pPrior==0.
-*/
-//~ void memsys5Free(void *pPrior){
-  //~ assert( pPrior!=0 );
-  //~ memsys5FreeUnsafe(pPrior); 
-//~ }
+void *zalloc(u32 nByte)
+{
+	u32 iFullSz;     /* Size of allocation rounded up to power of 2 */
+	u32 iLogsize;    /* Log2 of iFullSz/POW2_MIN */
+	// if nByte is 0 -> return 0 to be consistent with realloc
+	if (nByte==0) { return 0; }
+	/* Round nByte up to the next valid power of two */
+	for(iFullSz=ATOM_SIZE,iLogsize=0; iFullSz<nByte; iFullSz*=2,iLogsize++){}
+	if (iFullSz <= ATOM_SIZE*4)
+	{
+		void *cachedMem = mem.cached[iLogsize];
+		if (cachedMem)
+		{
+			helper_sendMsg1(0+(iLogsize<<8));
+			mem.cached[iLogsize] = 0;
+			return cachedMem;
+		}
+	}
+	takeSpinLock(MEMORY_LOCK_NUMBER);
+	void *memory = zalloc_internal(iFullSz, iLogsize);
+	giveSpinLock(MEMORY_LOCK_NUMBER);
+	return memory;
+}
+
+void *fastAlloc(u32 iLogsize)
+{
+	u32 iFullSz=32<<iLogsize;/* Size of allocation rounded up to power of 2 */
+	void *cachedMem = mem.cached[iLogsize];
+	if (cachedMem)
+	{
+		helper_sendMsg1(0+(iLogsize<<8));
+		mem.cached[iLogsize] = 0;
+		return cachedMem;
+	}
+	takeSpinLock(MEMORY_LOCK_NUMBER);
+	void *memory = zalloc_internal(iFullSz, iLogsize);
+	giveSpinLock(MEMORY_LOCK_NUMBER);
+	return memory;
+}
+
+void populateCache(u32 iLogsize)
+{
+	u32 iFullSz = ATOM_SIZE << iLogsize;
+	takeSpinLock(MEMORY_LOCK_NUMBER);
+	mem.cached[iLogsize] = zalloc_internal(iFullSz, iLogsize);
+	giveSpinLock(MEMORY_LOCK_NUMBER);
+}
 
 /*
 * Flexible memory allocation function.
@@ -364,7 +398,9 @@ void *realloc2(void *pPrior, u32 nBytes){
 		u8   *zeroizeTarget;
 		data1 = tmpPtr[0];
 		data2 = tmpPtr[1];
-		free(pPrior);
+		takeSpinLock(MEMORY_LOCK_NUMBER);
+		free_internal(pPrior);
+		giveSpinLock(MEMORY_LOCK_NUMBER);
 		disableZeroizeDMA();
 		newMemory = zalloc(nBytes);
 		if (newMemory == 0)
@@ -472,5 +508,9 @@ void memSysInit(void)
 			iOffset += nAlloc;
 		}
 	}
+	// pre-populate cache
+	mem.cached[0] = zalloc_internal(32, 0);
+	mem.cached[1] = zalloc_internal(64, 1);
+	mem.cached[2] = zalloc_internal(128, 2);
 	return;
 }

@@ -38,12 +38,18 @@ SIO_GPIO_OUT_CLR       = SIO_BASE + 0x18
 SIO_GPIO_OUT_XOR       = SIO_BASE + 0x1C 
 SIO_GPIO_OE_SET        = SIO_BASE + 0x24
 SIO_GPIO_OE_CLR        = SIO_BASE + 0x28
+SIO_FIFO_ST            = 0x050
+SIO_FIFO_WRITE         = 0x054
+SIO_FIFO_READ          = 0x058
 SIO_SIGNED_DIVIDEND    = 0x068
 SIO_SIGNED_DIVISOR     = 0x06C
 SIO_QUOTIENT           = 0x070
 SIO_REMAINDER          = 0x074
 SIO_DIV_CSR            = 0x078
 SIO_SPINLOCK_0         = SIO_BASE + 0x100
+
+PPB_BASE               = 0xE0000000
+PPB_INTERRUPT_PEND     = PPB_BASE + 0xE280
 
 
 IO_BANK0_BASE          = 0x40014000
@@ -93,6 +99,9 @@ DMA2_WRITE         = 0x8
 DMA2_TRAN_CNT      = 0xc
       
 DELAY_COUNT = 0x00100000
+
+FIFO_BUFF_START  = 0x20040000
+FIFO_WRITER_ADDR = 0x20040100
 
 END_OF_RAM = 0x20042000
 
@@ -177,7 +186,7 @@ vector_table:
 	.word REBOOT
 	.word REBOOT
 	
-	.word REBOOT   ;@ 16
+	.word fifoEnqueue   ;@ 16
 	.word REBOOT
 	.word REBOOT
 	.word REBOOT
@@ -303,6 +312,26 @@ REBOOT:
 	ldr r1,=1<<31
 	str r1,[r0]
 	b purgatory
+
+.balign 4
+.code 16
+.thumb_func
+.type fifoEnqueue, %function
+fifoEnqueue:
+	ldr  r3, =SIO_BASE
+	ldr  r2, =FIFO_WRITER_ADDR
+	ldr  r1, [r2] ;@ pointer into circular buffer
+1:	ldr  r0, [r3, #SIO_FIFO_READ] ;@ read the fifo
+	str  r0, [r1] ;@ store data into circular buffer
+	adds r1, 4    ;@ increment pointer
+	cmp  r1, r2
+	blo  2f
+	ldr  r1, =FIFO_BUFF_START
+2:	ldr  r0, [r3, #SIO_FIFO_ST] ;@ read fifo status
+	lsrs r0, 1
+	bcs  1b ;@ drain fifo
+	str  r1, [r2] ;@ store updated pointer
+	bx   lr
 
 .balign 4
 .ltorg
@@ -744,6 +773,8 @@ fithVMjumpTable:
 .word fithNotEqualJump
 .word fithAbs
 .word fithDrop
+.word fithZalloc
+.word fithFree
 
 
 .balign 4
@@ -1065,6 +1096,19 @@ fithDrop:
 	adds r5, 1
 	NEXT_INSTRUCTION
 
+.thumb_func
+fithZalloc:
+	bl   zalloc
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithFree:
+	bl   free
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
 .balign 4
 .ltorg
 
@@ -1075,8 +1119,9 @@ fithDrop:
 mainLoop:
 	push {lr}
 	;@ software init
-	bl memSysInit
-	bl fithRegistersInit
+	bl   helper_unlock
+	bl   memSysInit
+	bl   fithRegistersInit
 	;@ end software init
 	;@~ ldr  r7, =120*60
 1:
@@ -1622,6 +1667,30 @@ INPUT_BUFFERS:
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+.balign 4
+.code 16
+.thumb_func
+.global takeSpinLock
+.type takeSpinLock, %function
+takeSpinLock: ;@ r0 = lock to take
+	lsls r0, 2
+	ldr  r1, =SIO_SPINLOCK_0
+1:	ldr  r2, [r1, r0]
+	cmp  r2, #0
+	beq  1b
+	bx   lr
+	
+.balign 4
+.code 16
+.thumb_func
+.global giveSpinLock
+.type giveSpinLock, %function
+giveSpinLock: ;@ r0 = lock to give
+	lsls r0, 2
+	ldr  r1, =SIO_SPINLOCK_0
+	str  r0, [r1, r0]
+	bx   lr
 
 
 ;@ constants

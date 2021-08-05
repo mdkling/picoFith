@@ -97,20 +97,29 @@ memoryTesting(void)
 	free(memory3);
 	//~ memory1 = zalloc(1*MEM_TEST_VAL);
 	
-	u32 timerVal = readSysTimerVal(0);
-	memory2 = zalloc(1*MEM_TEST_VAL);
+	u32 timerVal;
+	//~ memory1 = zalloc(1*MEM_TEST_VAL);
+	//~ memory2 = zalloc(1*MEM_TEST_VAL);
+	//~ memory3 = zalloc(1*MEM_TEST_VAL);
+	timerVal = readSysTimerVal(0);
+	//~ memory2 = zalloc(1*MEM_TEST_VAL);
+	memory2 = fastAlloc(1);
+	//~ free(memory1);
 	printWord(-readSysTimerVal(timerVal));
 	prints("\n");
 	timerVal = readSysTimerVal(0);
-	memory2 = zalloc(1*MEM_TEST_VAL);
+	//~ memory2 = zalloc(1*MEM_TEST_VAL);
+	memory2 = fastAlloc(1);
+	//~ free(memory2);
 	printWord(-readSysTimerVal(timerVal));
 	prints("\n");
+	//~ timerVal = readSysTimerVal(0);
+	//~ memory2 = zalloc(1*MEM_TEST_VAL);
+	//~ free(memory3);
+	//~ printWord(-readSysTimerVal(timerVal));
+	//~ prints("\n");
 	timerVal = readSysTimerVal(0);
-	memory2 = zalloc(1*MEM_TEST_VAL);
-	printWord(-readSysTimerVal(timerVal));
-	prints("\n");
-	timerVal = readSysTimerVal(0);
-	memory2 = zalloc(1*MEM_TEST_VAL);
+	//~ memory2 = zalloc(1*MEM_TEST_VAL);
 	printWord(-readSysTimerVal(timerVal));
 	prints("\n");
 	
