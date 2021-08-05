@@ -21,6 +21,7 @@ void *realloc(void *pPrior, u32 nBytes);
 void *realloc2(void *pPrior, u32 nBytes);
 
 void populateCache(u32 iLogsize);
+void free_internal(void *pOld);
 
 u32 readSysTimerVal(u32 base);
 void takeSpinLock(u32 lockNum);

@@ -37,6 +37,12 @@ enum {
 	fithDrop,
 	fithZalloc,
 	fithFree,
+	fithBitwiseNot,
+	fithBitwiseAnd,
+	fithBitwiseOr,
+	fithBitwiseXor,
+	fithLshift,
+	fithRshift,
 	
 };
 
@@ -256,6 +262,36 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	
 	"free" {
 		*out++ = fithFree;
+		return out;
+	}
+	
+	"bw-not" {
+		*out++ = fithBitwiseNot;
+		return out;
+	}
+	
+	"bw-and" {
+		*out++ = fithBitwiseAnd;
+		return out;
+	}
+	
+	"bw-or" {
+		*out++ = fithBitwiseOr;
+		return out;
+	}
+	
+	"bw-xor" {
+		*out++ = fithBitwiseXor;
+		return out;
+	}
+	
+	"l-shift" {
+		*out++ = fithLshift;
+		return out;
+	}
+	
+	"r-shift" {
+		*out++ = fithRshift;
 		return out;
 	}
 	
