@@ -784,6 +784,8 @@ fithVMjumpTable:
 .word fithRshift
 .word fithSwap
 .word fithOver
+.word fithLoadGlobal
+.word fithStoreGlobal
 
 
 .balign 4
@@ -1184,6 +1186,26 @@ fithOver:
 	PUSH_TOS
 	movs r0, r1
 	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLoadGlobal:
+	PUSH_TOS
+	ldrb r0, [r5, #1]
+	lsls r0, 2
+	mov  r1, r8
+	ldr  r0, [r1, r0]
+	adds r5, 2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithStoreGlobal:
+	ldrb r1, [r5, #1]
+	lsls r1, 2
+	mov  r2, r8
+	str  r0, [r2, r1]
+	POP_TOS
+	adds r5, 2
 	NEXT_INSTRUCTION
 
 .balign 4

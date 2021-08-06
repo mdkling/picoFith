@@ -22,7 +22,8 @@ parseWord(u8 *out, u8 *start, u8 *YYCURSOR)
 		} else if (rawVal>>30 == 1) { // WORD_LOCAL
 			
 		} else if (rawVal>>30 == 2) { // WORD_GLOBAL
-			
+			*out++ = fithLoadGlobal;
+			*out++ = (rawVal<<2)>>2;
 		} else {                    // WORD_CONST
 			
 		}

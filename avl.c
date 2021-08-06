@@ -373,3 +373,12 @@ avl_deleteIntKey(
 	encodeInt(key, keyBuffer);
 	return avl_delete(treep, keyBuffer, 4);
 }
+
+void
+avl_freeAll(avlNode *root)
+{
+	if (root == 0) { return; }
+	avl_freeAll(root->next[0]);
+	avl_freeAll(root->next[1]);
+	AVL_FREE(root);
+}
