@@ -38,11 +38,18 @@ SIO_GPIO_OUT_CLR       = SIO_BASE + 0x18
 SIO_GPIO_OUT_XOR       = SIO_BASE + 0x1C 
 SIO_GPIO_OE_SET        = SIO_BASE + 0x24
 SIO_GPIO_OE_CLR        = SIO_BASE + 0x28
+SIO_FIFO_ST            = 0x050
+SIO_FIFO_WRITE         = 0x054
+SIO_FIFO_READ          = 0x058
 SIO_SIGNED_DIVIDEND    = 0x068
 SIO_SIGNED_DIVISOR     = 0x06C
 SIO_QUOTIENT           = 0x070
 SIO_REMAINDER          = 0x074
 SIO_DIV_CSR            = 0x078
+SIO_SPINLOCK_0         = SIO_BASE + 0x100
+
+PPB_BASE               = 0xE0000000
+PPB_INTERRUPT_PEND     = PPB_BASE + 0xE280
 
 
 IO_BANK0_BASE          = 0x40014000
@@ -93,6 +100,9 @@ DMA2_TRAN_CNT      = 0xc
       
 DELAY_COUNT = 0x00100000
 
+FIFO_BUFF_START  = 0x20040000
+FIFO_WRITER_ADDR = 0x20040100
+
 END_OF_RAM = 0x20042000
 
 ;@ Section Macros
@@ -133,6 +143,7 @@ END_OF_RAM = 0x20042000
 .endm
 
 ;@ Section Vector Table
+.global vector_table
 vector_table:
 	b reset
 	.balign 4
@@ -175,7 +186,7 @@ vector_table:
 	.word REBOOT
 	.word REBOOT
 	
-	.word REBOOT   ;@ 16
+	.word fifoEnqueue   ;@ 16
 	.word REBOOT
 	.word REBOOT
 	.word REBOOT
@@ -282,6 +293,8 @@ reset:
 	ldr r1, =__bss_end__
 	subs r1, r0
 	bl setZero
+	;@~ movs r6, 255
+	;@~ bl delay
 	bl mainLoop
 	;@~ bl notmain
 	b REBOOT
@@ -299,6 +312,26 @@ REBOOT:
 	ldr r1,=1<<31
 	str r1,[r0]
 	b purgatory
+
+.balign 4
+.code 16
+.thumb_func
+.type fifoEnqueue, %function
+fifoEnqueue:
+	ldr  r3, =SIO_BASE
+	ldr  r2, =FIFO_WRITER_ADDR
+	ldr  r1, [r2] ;@ pointer into circular buffer
+1:	ldr  r0, [r3, #SIO_FIFO_READ] ;@ read the fifo
+	str  r0, [r1] ;@ store data into circular buffer
+	adds r1, 4    ;@ increment pointer
+	cmp  r1, r2
+	blo  2f
+	ldr  r1, =FIFO_BUFF_START
+2:	ldr  r0, [r3, #SIO_FIFO_ST] ;@ read fifo status
+	lsrs r0, 1
+	bcs  1b ;@ drain fifo
+	str  r1, [r2] ;@ store updated pointer
+	bx   lr
 
 .balign 4
 .ltorg
@@ -581,6 +614,28 @@ setZero: ;@ r0 = dst r1 = size
 .balign 4
 .code 16
 .thumb_func
+.global disableZeroizeDMA
+.type disableZeroizeDMA, %function
+disableZeroizeDMA: ;@ no inputs
+	ldr  r1,=DMA_2_BASE + ATOMIC_CLR ;@ base reg
+	movs r0, 1
+	str  r0,[r1, #DMA2_CTRL]
+	bx lr
+	
+.balign 4
+.code 16
+.thumb_func
+.global enableZeroizeDMA
+.type enableZeroizeDMA, %function
+enableZeroizeDMA: ;@ no inputs
+	ldr  r1,=DMA_2_BASE + ATOMIC_SET ;@ base reg
+	movs r0, 1
+	str  r0,[r1, #DMA2_CTRL]
+	bx lr
+
+.balign 4
+.code 16
+.thumb_func
 .type configSysTick, %function
 configSysTick:
 	;@ Section SysTick 
@@ -595,6 +650,17 @@ configSysTick:
 	
 	;@ enable on interrupt, doesnt seem to need it?
 	
+	bx lr
+
+.balign 4
+.code 16
+.thumb_func
+.global readSysTimerVal
+.type readSysTimerVal, %function
+readSysTimerVal:
+	ldr  r1, =SYST_CSR
+	ldr  r1, [r1, #SYST_CVR]
+	subs r0, r1, r0
 	bx lr
 
 .balign 4
@@ -705,6 +771,21 @@ fithVMjumpTable:
 .word fithLessThanEqualJump
 .word fithEqualJump
 .word fithNotEqualJump
+.word fithAbs
+.word fithDrop
+.word fithZalloc
+.word fithFree
+.word fithRealloc
+.word fithBitwiseNot
+.word fithBitwiseAnd
+.word fithBitwiseOr
+.word fithBitwiseXor
+.word fithLshift
+.word fithRshift
+.word fithSwap
+.word fithOver
+.word fithLoadGlobal
+.word fithStoreGlobal
 
 
 .balign 4
@@ -1012,6 +1093,124 @@ fithNotEqualJump:
 	adds r5, 3
 	NEXT_INSTRUCTION
 
+.thumb_func
+fithAbs:
+	asrs r1, r0, #31
+	adds r0, r0, r1
+	eors r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithDrop:
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithZalloc:
+	bl   zalloc
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithFree:
+	bl   free
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithRealloc:
+	movs r1, r0
+	POP_TOS
+	bl   realloc
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithBitwiseNot:
+	mvns r0, r0
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithBitwiseAnd:
+	POP_SCATCH1
+	ands r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithBitwiseOr:
+	POP_SCATCH1
+	orrs r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithBitwiseXor:
+	POP_SCATCH1
+	eors r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLshift:
+	POP_SCATCH1
+	lsls r1, r0
+	movs r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithRshift:
+	POP_SCATCH1
+	asrs r1, r0
+	movs r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithSwap:
+	POP_SCATCH1
+	PUSH_TOS
+	movs r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithOver:
+	POP_SCATCH1
+	adds r4, 4
+	PUSH_TOS
+	movs r0, r1
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLoadGlobal:
+	PUSH_TOS
+	ldrb r0, [r5, #1]
+	lsls r0, 2
+	mov  r1, r8
+	ldr  r0, [r1, r0]
+	adds r5, 2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithStoreGlobal:
+	ldrb r1, [r5, #1]
+	lsls r1, 2
+	mov  r2, r8
+	str  r0, [r2, r1]
+	POP_TOS
+	adds r5, 2
+	NEXT_INSTRUCTION
+
+.balign 4
+.ltorg
+
 .balign 4
 .code 16
 .thumb_func
@@ -1019,8 +1218,9 @@ fithNotEqualJump:
 mainLoop:
 	push {lr}
 	;@ software init
-	bl memsys5Init
-	bl fithRegistersInit
+	bl   helper_unlock
+	bl   memSysInit
+	bl   fithRegistersInit
 	;@ end software init
 	;@~ ldr  r7, =120*60
 1:
@@ -1243,6 +1443,10 @@ uartTX: ;@ r0 = pointer to data start r1 = size of transmission
 .thumb_func
 .type prints, %function
 prints: ;@ r0 = pointer to null terminated string
+	;@~ ldr  r1, =SIO_SPINLOCK_0
+;@~ 1:	ldr  r2, [r1]
+	;@~ cmp  r2, #0
+	;@~ beq  1b
 	ldr r1,=UART0_BASE ;@ get address of UART
 	b 2f
 1:
@@ -1256,6 +1460,8 @@ prints: ;@ r0 = pointer to null terminated string
 	ldrb r2, [r0]
 	cmp  r2, #0
 	bne 1b
+	;@~ ldr  r1, =SIO_SPINLOCK_0
+	;@~ str  r0, [r1]
 	bx lr
 
 .balign 4
@@ -1265,6 +1471,10 @@ prints: ;@ r0 = pointer to null terminated string
 .type printWord, %function
 printWord: ;@ r0 = data to print
 	push {r4,r5,r6,lr}
+	;@~ ldr  r1, =SIO_SPINLOCK_0
+;@~ 1:	ldr  r2, [r1]
+	;@~ cmp  r2, #0
+	;@~ beq  1b
 	ldr r2,=0x0F
 	ldr r3,=UART0_BASE ;@ get address of UART
 	movs r4, r0
@@ -1285,6 +1495,8 @@ printWord: ;@ r0 = data to print
 	strb  r0,[r3, #UART0_DR] ;@ write data out the serial port
 	subs  r5, 4
 	bge   1b
+	;@~ ldr  r1, =SIO_SPINLOCK_0
+	;@~ str  r0, [r1]
 	pop {r4,r5,r6,pc}
 
 .balign 4
@@ -1555,6 +1767,30 @@ INPUT_BUFFERS:
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 .word 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
+.balign 4
+.code 16
+.thumb_func
+.global takeSpinLock
+.type takeSpinLock, %function
+takeSpinLock: ;@ r0 = lock to take
+	lsls r0, 2
+	ldr  r1, =SIO_SPINLOCK_0
+1:	ldr  r2, [r1, r0]
+	cmp  r2, #0
+	beq  1b
+	bx   lr
+	
+.balign 4
+.code 16
+.thumb_func
+.global giveSpinLock
+.type giveSpinLock, %function
+giveSpinLock: ;@ r0 = lock to give
+	lsls r0, 2
+	ldr  r1, =SIO_SPINLOCK_0
+	str  r0, [r1, r0]
+	bx   lr
+
 
 ;@ constants
 PIO_1_BASE          = 0x50300000
@@ -1650,114 +1886,115 @@ pioInstructions:
 .word 0x1F91 ;@ 30 jmp y-- goto 17 [31]
 .word 0x0001 ;@ 31 jmp  goto 01 [31]
 
+
 ;@ node struct definition
-nodeNext0    = 0
-nodeNext1    = 4
-nodeValue    = 8
-nodeLevel    = 12
-nodeKeyLen   = 13
-nodeKeyStart = 14
+;@~ nodeNext0    = 0
+;@~ nodeNext1    = 4
+;@~ nodeValue    = 8
+;@~ nodeLevel    = 12
+;@~ nodeKeyLen   = 13
+;@~ nodeKeyStart = 14
 
-.balign 4
-.code 16
-.thumb_func
-.global aa_Insert
-.type aa_Insert, %function
-aa_Insert: ;@ r0: pointer to tree r1: pointer to key r2: keyLen r3: value
-	mov  r8, r5
-	adr  r5, nilNode
-	cmp  r0, r5
-	mov  r5, r8
-	beq  makeNode
-	cmp  r0, 0
-	beq  makeNode
-	push {r4, r5, r6, r7, lr}
-	movs r4, r0
-	adds r4, nodeKeyStart
-	movs r7, 0
-1:
-	ldrb r5, [r1, r7]
-	ldrb r6, [r4, r7]
-	subs r5, r6 ;@ return value is r5 if not equal to zero
-	bne  1f
-	adds r7, 1
-	cmp  r7, r2
-	blt  1b
-	ldrb r6, [r0, #nodeKeyLen]
-	subs r5, r2, r6 ;@ return value is r2 - r7->keyLen
-	bne  1f
-	str  r3, [r0, #nodeValue]
-	pop  {r4, r5, r6, r7, pc}
-1:
-	lsrs r5, 31
-	lsls r5, 2
-	adds r4, r0, r5
-	ldr  r0, [r4]
-	bl   aa_Insert
-	str  r0, [r4]
-	subs r0, r4, r5
-	bl   skew
-	bl   split
-	pop  {r4, r5, r6, r7, pc}
+;@~ .balign 4
+;@~ .code 16
+;@~ .thumb_func
+;@~ .global aa_Insert
+;@~ .type aa_Insert, %function
+;@~ aa_Insert: ;@ r0: pointer to tree r1: pointer to key r2: keyLen r3: value
+	;@~ mov  r8, r5
+	;@~ adr  r5, nilNode
+	;@~ cmp  r0, r5
+	;@~ mov  r5, r8
+	;@~ beq  makeNode
+	;@~ cmp  r0, 0
+	;@~ beq  makeNode
+	;@~ push {r4, r5, r6, r7, lr}
+	;@~ movs r4, r0
+	;@~ adds r4, nodeKeyStart
+	;@~ movs r7, 0
+;@~ 1:
+	;@~ ldrb r5, [r1, r7]
+	;@~ ldrb r6, [r4, r7]
+	;@~ subs r5, r6 ;@ return value is r5 if not equal to zero
+	;@~ bne  1f
+	;@~ adds r7, 1
+	;@~ cmp  r7, r2
+	;@~ blt  1b
+	;@~ ldrb r6, [r0, #nodeKeyLen]
+	;@~ subs r5, r2, r6 ;@ return value is r2 - r7->keyLen
+	;@~ bne  1f
+	;@~ str  r3, [r0, #nodeValue]
+	;@~ pop  {r4, r5, r6, r7, pc}
+;@~ 1:
+	;@~ lsrs r5, 31
+	;@~ lsls r5, 2
+	;@~ adds r4, r0, r5
+	;@~ ldr  r0, [r4]
+	;@~ bl   aa_Insert
+	;@~ str  r0, [r4]
+	;@~ subs r0, r4, r5
+	;@~ bl   skew
+	;@~ bl   split
+	;@~ pop  {r4, r5, r6, r7, pc}
 
-.balign 4
-.code 16
-.thumb_func
-.type makeNode, %function
-makeNode: ;@ r0: pointer to tree r1: pointer to key r2: keyLen r3: value
-	mov  r12, lr
-	movs r0, r2 ;@ r0 is 0, and not needed
-	adds r0, 18
-	push {r1, r2, r3}
-	bl   zalloc ;@ r0 is now new address
-	pop  {r1, r2, r3}
-	str  r3, [r0, #nodeValue]
-	adr  r3, nilNode
-	str  r3, [r0, #nodeNext0]
-	str  r3, [r0, #nodeNext1]
-	strb r2, [r0, #nodeKeyLen]
-	movs r3, 1
-	strb r3, [r0, #nodeLevel]
-	adds r0, nodeKeyStart
-	movs r3, 0
-	strb r3, [r0, r2] ;@ null terminate
-1: ;@ copy loop
-	subs r2, 1
-	ldrb r3, [r1, r2]
-	strb r3, [r0, r2]
-	bne  1b
-	subs r0, nodeKeyStart
-	bx   r12
+;@~ .balign 4
+;@~ .code 16
+;@~ .thumb_func
+;@~ .type makeNode, %function
+;@~ makeNode: ;@ r0: pointer to tree r1: pointer to key r2: keyLen r3: value
+	;@~ mov  r12, lr
+	;@~ movs r0, r2 ;@ r0 is 0, and not needed
+	;@~ adds r0, 18
+	;@~ push {r1, r2, r3}
+	;@~ bl   zalloc ;@ r0 is now new address
+	;@~ pop  {r1, r2, r3}
+	;@~ str  r3, [r0, #nodeValue]
+	;@~ adr  r3, nilNode
+	;@~ str  r3, [r0, #nodeNext0]
+	;@~ str  r3, [r0, #nodeNext1]
+	;@~ strb r2, [r0, #nodeKeyLen]
+	;@~ movs r3, 1
+	;@~ strb r3, [r0, #nodeLevel]
+	;@~ adds r0, nodeKeyStart
+	;@~ movs r3, 0
+	;@~ strb r3, [r0, r2] ;@ null terminate
+;@~ 1: ;@ copy loop
+	;@~ subs r2, 1
+	;@~ ldrb r3, [r1, r2]
+	;@~ strb r3, [r0, r2]
+	;@~ bne  1b
+	;@~ subs r0, nodeKeyStart
+	;@~ bx   r12
 
-.balign 4
-.code 16
-.thumb_func
-.global walkAA
-.type walkAA, %function
-walkAA: ;@ r0: pointer to tree
-	push {r4, lr}
-	adr  r1, nilNode
-	cmp  r0, r1
-	beq  1f
-	movs r4, r0
-	movs r1, nodeKeyStart
-	adds r0, r4, r1
-	bl   prints
-	ldr  r0, [r4, #0]
-	bl   walkAA
-	ldr  r0, [r4, #4]
-	bl   walkAA
-1:
-	pop  {r4, pc}
+;@~ .balign 4
+;@~ .code 16
+;@~ .thumb_func
+;@~ .global walkAA
+;@~ .type walkAA, %function
+;@~ walkAA: ;@ r0: pointer to tree
+	;@~ push {r4, lr}
+	;@~ adr  r1, nilNode
+	;@~ cmp  r0, r1
+	;@~ beq  1f
+	;@~ movs r4, r0
+	;@~ movs r1, nodeKeyStart
+	;@~ adds r0, r4, r1
+	;@~ bl   prints
+	;@~ ldr  r0, [r4, #0]
+	;@~ bl   walkAA
+	;@~ ldr  r0, [r4, #4]
+	;@~ bl   walkAA
+;@~ 1:
+	;@~ pop  {r4, pc}
 
-.balign 4
-.ltorg
+;@~ .balign 4
+;@~ .ltorg
 
-nilNode:
-.word nilNode
-.word nilNode
-.word 0
-.word 0
+;@~ nilNode:
+;@~ .word nilNode
+;@~ .word nilNode
+;@~ .word 0
+;@~ .word 0
 
 
 ;@~ charClasses:
@@ -1778,45 +2015,47 @@ nilNode:
 ;@~ ;@ 70   p   q   r   s   t   u   v   w   x   y   z   {   |   }   ~ DEL
 ;@~ .byte   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0
 
-;@~ .global __gnu_thumb1_case_uqi
-;@~ .thumb_func
-;@~ __gnu_thumb1_case_uqi:
-	;@~ mov     r12, r1
-	;@~ mov     r1, lr
-	;@~ lsrs    r1, r1, #1
-	;@~ lsls    r1, r1, #1
-	;@~ ldrb    r1, [r1, r0]
-	;@~ lsls    r1, r1, #1
-	;@~ add     lr, lr, r1
-	;@~ mov     r1, r12
-	;@~ bx      lr
 
-;@~ .global __gnu_thumb1_case_sqi
-;@~ .thumb_func
-;@~ __gnu_thumb1_case_sqi:
-	;@~ mov     r12, r1
-	;@~ mov     r1, lr
-	;@~ lsrs    r1, r1, #1
-	;@~ lsls    r1, r1, #1
-	;@~ ldrsb   r1, [r1, r0]
-	;@~ lsls    r1, r1, #1
-	;@~ add     lr, lr, r1
-	;@~ mov     r1, r12
-	;@~ bx      lr
+;@ ARM implementations for the compiler
+.global __gnu_thumb1_case_uqi
+.thumb_func
+__gnu_thumb1_case_uqi:
+	mov     r12, r1
+	mov     r1, lr
+	lsrs    r1, r1, #1
+	lsls    r1, r1, #1
+	ldrb    r1, [r1, r0]
+	lsls    r1, r1, #1
+	add     lr, lr, r1
+	mov     r1, r12
+	bx      lr
 
-;@~ .global __gnu_thumb1_case_uhi
-;@~ .thumb_func
-;@~ __gnu_thumb1_case_uhi:
-	;@~ push    {r0, r1}
-	;@~ mov     r1, lr
-	;@~ lsrs    r1, r1, #1
-	;@~ lsls    r0, r0, #1
-	;@~ lsls    r1, r1, #1
-	;@~ ldrh    r1, [r1, r0]
-	;@~ lsls    r1, r1, #1
-	;@~ add     lr, lr, r1
-	;@~ pop     {r0, r1}
-	;@~ bx      lr
+.global __gnu_thumb1_case_sqi
+.thumb_func
+__gnu_thumb1_case_sqi:
+	mov     r12, r1
+	mov     r1, lr
+	lsrs    r1, r1, #1
+	lsls    r1, r1, #1
+	ldrsb   r1, [r1, r0]
+	lsls    r1, r1, #1
+	add     lr, lr, r1
+	mov     r1, r12
+	bx      lr
+
+.global __gnu_thumb1_case_uhi
+.thumb_func
+__gnu_thumb1_case_uhi:
+	push    {r0, r1}
+	mov     r1, lr
+	lsrs    r1, r1, #1
+	lsls    r0, r0, #1
+	lsls    r1, r1, #1
+	ldrh    r1, [r1, r0]
+	lsls    r1, r1, #1
+	add     lr, lr, r1
+	pop     {r0, r1}
+	bx      lr
 
 .global __gnu_thumb1_case_shi
 .thumb_func
@@ -1832,19 +2071,19 @@ __gnu_thumb1_case_shi:
 	pop     {r0, r1}
 	bx      lr
 
-;@~ .global __gnu_thumb1_case_si
-;@~ .thumb_func
-;@~ __gnu_thumb1_case_si:
-	;@~ push	{r0, r1}
-	;@~ mov	r1, lr
-	;@~ adds.n	r1, r1, #2
-	;@~ lsrs	r1, r1, #2
-	;@~ lsls	r0, r0, #2
-	;@~ lsls	r1, r1, #2
-	;@~ ldr	r0, [r1, r0]
-	;@~ adds	r0, r0, r1
-	;@~ mov	lr, r0
-	;@~ pop	{r0, r1}
-	;@~ mov	pc, lr
+.global __gnu_thumb1_case_si
+.thumb_func
+__gnu_thumb1_case_si:
+	push	{r0, r1}
+	mov	r1, lr
+	adds.n	r1, r1, #2
+	lsrs	r1, r1, #2
+	lsls	r0, r0, #2
+	lsls	r1, r1, #2
+	ldr	r0, [r1, r0]
+	adds	r0, r0, r1
+	mov	lr, r0
+	pop	{r0, r1}
+	mov	pc, lr
 
 

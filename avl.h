@@ -46,4 +46,7 @@ avl_deleteIntKey(
 	avlNode **treep,
 	s32       key);
 
+void
+avl_freeAll(avlNode *root);
+
 #endif

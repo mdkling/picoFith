@@ -225,7 +225,6 @@ avl_insert(
 		treep = &tree->next[result > 0];
 		tree = *treep;
 	}
-	
 	tree = makeNode(key, keyLen, value);
 	*treep = tree;
 	avl_rebalance_insert(path_top);
@@ -373,4 +372,13 @@ avl_deleteIntKey(
 	u8 keyBuffer[8];
 	encodeInt(key, keyBuffer);
 	return avl_delete(treep, keyBuffer, 4);
+}
+
+void
+avl_freeAll(avlNode *root)
+{
+	if (root == 0) { return; }
+	avl_freeAll(root->next[0]);
+	avl_freeAll(root->next[1]);
+	AVL_FREE(root);
 }

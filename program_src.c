@@ -2,17 +2,7 @@
 #include "localTypes.h"
 #include "memory.h"
 #include "avl.h"
-typedef struct aaNode aaNode;
-typedef struct aaNode {
-	aaNode *next[2];
-	void    *value;
-	s8       level;
-	u8       keyLen;
-	u8       key[2];
-} aaNode;
 
-aaNode *
-aa_Insert(aaNode *root, u8 *key, u32 keyLen, void *val);
 enum {
 	fithConstant0,
 	fithConstant1,
@@ -43,6 +33,21 @@ enum {
 	fithLessThanEqualJump,
 	fithEqualJump,
 	fithNotEqualJump,
+	fithAbs,
+	fithDrop,
+	fithZalloc,
+	fithFree,
+	fithRealloc,
+	fithBitwiseNot,
+	fithBitwiseAnd,
+	fithBitwiseOr,
+	fithBitwiseXor,
+	fithLshift,
+	fithRshift,
+	fithSwap,
+	fithOver,
+	fithLoadGlobal,
+	fithStoreGlobal,
 	
 };
 
@@ -64,14 +69,27 @@ typedef struct blockInfo {
 	s32  blockType;	
 } blockInfo;
 
+typedef struct TypeInfo {
+	avlNode *members;
+} TypeInfo;
+
+typedef struct VarInfo {
+	u32  value;
+	TypeInfo *t;
+} VarInfo;
 
 typedef struct fithLexState {
+	u8         insideFunction;
+	u8         pad1;
+	u8         pad2;
+	u8         pad3;
 	u8        *outBufferStart;
 	u8        *outBufferCursor;
 	s32        globalsBufferSize;
 	avlNode   *wordTreeRoot;
-	aaNode   *wordTreeRoot2;
-	u32        inBlockStateStack;
+	avlNode   *localVarsRoot;
+	s32        numLocalVars;
+	s32        numGlobalVars;
 	s32        blockStackIndex;
 	blockInfo *blockStack;
 } fithLexState;
@@ -98,15 +116,14 @@ void  REBOOT(void);
 #define PRINT_STRING(string) uartTX(string, sizeof string - 1)
 #define ARRAY_SIZE(a) ((sizeof a)/(sizeof a[0]))
 
-u8  __bss_end__[4];
+extern u8  __bss_end__[4];
+extern fithRegisters fithExecutionState;
 static blockInfo blockStackMem[32];
-fithRegisters fithExecutionState;
 static fithLexState  fls = {
 	.outBufferStart    = __bss_end__,
 	.outBufferCursor   = 0,
 	.wordTreeRoot      = 0,
-	.globalsBufferSize = 0,
-	.inBlockStateStack = 0,
+	.globalsBufferSize = 32,
 	.blockStackIndex   = 0,
 	.blockStack        = blockStackMem,
 };
@@ -114,7 +131,7 @@ static fithLexState  fls = {
 void
 fithRegistersInit(void)
 {
-	fithExecutionState.globals = zalloc(16);
+	fithExecutionState.globals = zalloc(32);
 	fithExecutionState.returnStack = zalloc(64);
 	fithExecutionState.bottomOfExprStack = zalloc(64);
 	fithExecutionState.currentStackPtr = fithExecutionState.bottomOfExprStack;
@@ -133,20 +150,7 @@ walkNodes(avlNode *root)
 	walkNodes(root->next[1]);
 }
 
-void
-walkNodes2(aaNode *root)
-{
-	if (root == 0)
-	{
-		return;
-	}
-	walkNodes2(root->next[0]);
-	uartTX(root->key, root->keyLen);
-	PRINT_STRING("\n");
-	walkNodes2(root->next[1]);
-}
-
-static s32
+s32
 s2i(u8 *b)
 {
 	s32 result     = 0;
@@ -223,6 +227,9 @@ writeInteger(u8 *out, u32 val)
 	wordOperators = [@#$^~;:!?];
 	word = [a-zA-Z_] [a-zA-Z_0-9?!-]*;
 	word_definition = word "{";
+	var_declaration = word "$";
+	var_assign = word "=";
+	const_declaration = word ":=";
 	word_increment = word "++";
 	function_call_addr = "@" word ;
 	function_definition = word ":";
@@ -232,6 +239,7 @@ writeInteger(u8 *out, u32 val)
 
 #include "parser.c"
 #include "pio.c"
+#include "helperCpu.c"
 
 void
 configPioAsm(void);
@@ -251,12 +259,76 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	
 	"walk" {
 		walkNodes(fls.wordTreeRoot);
-		walkAA(fls.wordTreeRoot2);
 		return out;
 	}
 	
 	"dup" {
 		*out++ = fithDup;
+		return out;
+	}
+	
+	"drop" {
+		*out++ = fithDrop;
+		return out;
+	}
+	
+	"abs" {
+		*out++ = fithAbs;
+		return out;
+	}
+	
+	"zalloc" {
+		*out++ = fithZalloc;
+		return out;
+	}
+	
+	"free" {
+		*out++ = fithFree;
+		return out;
+	}
+	
+	"realloc" {
+		*out++ = fithRealloc;
+		return out;
+	}
+	
+	"bw-not" {
+		*out++ = fithBitwiseNot;
+		return out;
+	}
+	
+	"bw-and" {
+		*out++ = fithBitwiseAnd;
+		return out;
+	}
+	
+	"bw-or" {
+		*out++ = fithBitwiseOr;
+		return out;
+	}
+	
+	"bw-xor" {
+		*out++ = fithBitwiseXor;
+		return out;
+	}
+	
+	"l-shift" {
+		*out++ = fithLshift;
+		return out;
+	}
+	
+	"r-shift" {
+		*out++ = fithRshift;
+		return out;
+	}
+	
+	"swap" {
+		*out++ = fithSwap;
+		return out;
+	}
+	
+	"over" {
+		*out++ = fithOver;
 		return out;
 	}
 	
@@ -268,6 +340,7 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	"config-pio" {
 		configPIO();
 		configPioAsm();
+		memoryTesting();
 		return out;
 	}
 	
@@ -278,6 +351,16 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 
 	"play-wave" {
 		playWaveform();
+		return out;
+	}
+	
+	"hello-core1" {
+		helper_unlock();
+		return out;
+	}
+	
+	"sendMsg" {
+		helper_send();
 		return out;
 	}
 	
@@ -394,7 +477,13 @@ loop:
 			}
 		} else if (blockType == BLOCK_FUNCTION) {
 			// output return
-			*out++ = fithReturn;
+			*out++ = fithReturn+fls.numLocalVars;
+			fls.insideFunction = 0;
+			fls.numLocalVars = 0;
+			if (fls.blockStackIndex != 0)
+			{
+				prints("WARNING: word defined within a block. Probably wrong.");
+			}
 			// move start forward so we save the function we created
 			prints("size of word:");
 			printWord(out - fls.outBufferStart);
@@ -458,16 +547,6 @@ loop:
 		goto finishOutCJUMP;
 	}
 	
-	//~ "`walk" {
-		//~ walkNodes(fls.wordTreeRoot);
-		//~ goto loop;
-	//~ }
-	
-	//~ "`dup" {
-		//~ *out++ = fithDup;
-		//~ goto loop;
-	//~ }
-	
 	// A word can be a function or a variable. I could add different syntax
 	// for variables versus functions, but that would probably look bad?
 	// On the other hand loading and storing could be used as postfix operators.
@@ -489,24 +568,133 @@ loop:
 		//~ goto loop;
 	//~ }
 	
+	// This is how variables are declared, each var is a typeless 4 byte word.
+	// we first search the immediate context to see if the variable already
+	// exists. There are two contexts to keep things simple, global and function
+	// and if we are defining a function we are in that context otherwise we
+	// are in the global context.
+	var_declaration {
+		if (fls.insideFunction)
+		{
+			// we are inside a function, check local context
+			avlNode *retNode = avl_find(
+				fls.localVarsRoot,     // pointer to tree
+				start,      // pointer to string
+				YYCURSOR - start - 1);  // length of string (255 max)
+			if (retNode)
+			{
+				// local already exists
+				prints("local variable ");
+				uartTX(start, YYCURSOR - start - 1);
+				prints(" already exists.\n");
+			} else {
+				// local does not exist
+				s32 localIndex = fls.numLocalVars++;
+				// check if we are over the limit of locals
+				if (fls.numLocalVars > 8)
+				{
+					prints("Error: Cannot make more than 8 locals.\n");
+					goto loop;
+				}
+				// save off local index
+				(void)avl_insert(
+					&fls.wordTreeRoot,   // pointer memory holding address of tree
+					start,     // pointer to string
+					YYCURSOR - start - 1,  // length of string (255 max)
+					(void*)(localIndex+(1<<30)) );   // value to be stored
+			}
+		} else {
+			// we are not inside a function check global context
+			avlNode *retNode = avl_find(
+				fls.wordTreeRoot,     // pointer to tree
+				start,      // pointer to string
+				YYCURSOR - start - 1);  // length of string (255 max)
+			if (retNode)
+			{
+				// global already exists
+				prints("global variable ");
+				uartTX(start, YYCURSOR - start - 1);
+				prints(" already exists.\n");
+			} else {
+				// global does not exist
+				s32 globalIndex = fls.numGlobalVars++;
+				// check if we need to expand global array
+				if (fls.numGlobalVars > fls.globalsBufferSize)
+				{
+					fls.globalsBufferSize*=2;
+					fithExecutionState.globals = realloc(fithExecutionState.globals, fls.globalsBufferSize);
+				}
+				// save off global index
+				(void)avl_insert(
+					&fls.wordTreeRoot,   // pointer memory holding address of tree
+					start,     // pointer to string
+					YYCURSOR - start - 1,  // length of string (255 max)
+					(void*)(globalIndex+(2<<30)) );   // value to be stored
+			}
+		}
+		goto loop;
+	}
+	
+	const_declaration {
+		prints("Not sure if there will be constants.\n");
+		goto loop;
+	}
+	
+	var_assign {
+		if (fls.insideFunction)
+		{
+			// we are inside a function, check local context
+			avlNode *retNode = avl_find(
+				fls.localVarsRoot,     // pointer to tree
+				start,      // pointer to string
+				YYCURSOR - start - 1);  // length of string (255 max)
+			if (retNode)
+			{
+				// variable exists, emit store
+				u32 rawVal = (u32)retNode->value;
+				//~ *out++ = fithLoadGlobal;
+				*out++ = (rawVal<<2)>>2;
+				goto loop;
+			}
+		}
+		// we are not inside a function check global context
+		avlNode *retNode = avl_find(
+			fls.wordTreeRoot,     // pointer to tree
+			start,      // pointer to string
+			YYCURSOR - start - 1);  // length of string (255 max)
+		if (retNode)
+		{
+			// variable exists, emit store
+			u32 rawVal = (u32)retNode->value;
+			*out++ = fithStoreGlobal;
+			*out++ = (rawVal<<2)>>2;
+		} else {
+			// variable does not exist
+			prints("variable ");
+			uartTX(start, YYCURSOR - start - 1);
+			prints(" does not exist.\n");
+		}
+		goto loop;
+	}
+
 	word_definition {
-		prints("about to save word!\n");
-		fls.wordTreeRoot2 = aa_Insert(fls.wordTreeRoot2, start, YYCURSOR - start - 1, out);
-		printWord((s32)fls.wordTreeRoot2);
-		prints(" after saving word!\n");
-		//~ avlNode *retNode = avl_insert(
-			//~ &fls.wordTreeRoot,   // pointer memory holding address of tree
-			//~ start,     // pointer to string
-			//~ YYCURSOR - start - 1,  // length of string (255 max)
-			//~ out );   // value to be stored
-		//~ fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_FUNCTION;
-		//~ if (retNode) {
-			//~ PRINT_STRING("word already existed\n");
-		//~ } else {
-			//~ prints("saving start of word: ");
-			//~ uartTX(start, YYCURSOR - start);
-			//~ PRINT_STRING("\n");
-		//~ }
+		//~ u32 timerVal = readSysTimerVal(0);
+		avlNode *retNode = avl_insert(
+			&fls.wordTreeRoot,   // pointer memory holding address of tree
+			start,     // pointer to string
+			YYCURSOR - start - 1,  // length of string (255 max)
+			out );   // value to be stored
+		//~ printWord(-readSysTimerVal(timerVal));
+		//~ prints("\n");
+		fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_FUNCTION;
+		fls.insideFunction = 1;
+		if (retNode) {
+			PRINT_STRING("word already existed\n");
+		} else {
+			prints("saving start of word: ");
+			uartTX(start, YYCURSOR - start);
+			PRINT_STRING("\n");
+		}
 		goto loop;
 	}
 	

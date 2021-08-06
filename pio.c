@@ -109,14 +109,14 @@ u32 squareData[] =  {
 	0x00000000,
 	0x00000000,
 	0x00000000,
-	0xFFFFFFFF,
-	0xFFFFFFFF,
-	0xFFFFFFFF,
-	0xFFFFFFFF,
-	0xFFFFFFFF,
-	0xFFFFFFFF,
-	0xFFFFFFFF,
-	0xFFFFFFFF,
+	0x7FFF7FFF,
+	0x7FFF7FFF,
+	0x7FFF7FFF,
+	0x7FFF7FFF,
+	0x7FFF7FFF,
+	0x7FFF7FFF,
+	0x7FFF7FFF,
+	0x7FFF7FFF,
 };
 
 u32 aiffPulse[] = {
@@ -298,7 +298,7 @@ outputSound(void)
 {
 	volatile u32 *outputFifo;
 	volatile u32 *deviceCtrl;
-	u32 count = 1000000;
+	u32 count = 100000;
 	outputFifo = (u32*)PIO_0_SM0_TX;
 	//~ deviceCtrl = (u32*)PIO_0_SM0_INSTRADDR;
 	deviceCtrl = (u32*)PIO_0_SM0_INSTR;
@@ -352,7 +352,7 @@ outputSound(void)
 	while (count!=0)
 	{
 		while ( (readFifoStatus()&0xF) > 7) { }
-		*outputFifo = soundData[count&0xF];
+		*outputFifo = squareData[count&0xF];
 		//~ *outputFifo = 0xFFFFFFFF;
 		count--;
 	}
@@ -361,81 +361,68 @@ outputSound(void)
 	prints("sound has been sent!\n");
 }
 
-
-
-
-// void
-// playWaveform(void)
-// {
-// 	prints("Hello Waveform");
-// }
 
 
 
 void
 playWaveform(void)
 {
-	volatile u32 *outputFifo;
-	volatile u32 *deviceCtrl;
-	u32 count = 1000000;
-	outputFifo = (u32*)PIO_0_SM0_TX;
-	//~ deviceCtrl = (u32*)PIO_0_SM0_INSTRADDR;
-	deviceCtrl = (u32*)PIO_0_SM0_INSTR;
-	*deviceCtrl = 0x0007, // entry point
-	deviceCtrl = (u32*)PIO_0_FIFOSTATUS;
-	printWord(*deviceCtrl);
-	printWord(readFifoStatus());
-	prints("\n");
-	//~ *outputFifo = soundData[0];
-	writeSound(soundData[0]);
-	printWord(readFifoStatus());
-	prints("\n");
-	//~ *outputFifo = soundData[1];
-	writeSound(soundData[1]);
-	printWord(readFifoStatus());
-	prints("\n");
-	//~ *outputFifo = soundData[2];
-	writeSound(soundData[2]);
-	printWord(readFifoStatus());
-	prints("\n");
-	//~ *outputFifo = soundData[3];
-	writeSound(soundData[3]);
-	printWord(readFifoStatus());
-	prints("\n");
-	//~ *outputFifo = soundData[4];
-	writeSound(soundData[4]);
-	printWord(readFifoStatus());
-	prints("\n");
-	//~ *outputFifo = soundData[5];
-	writeSound(soundData[5]);
-	//~ writeSound(soundData[6]);
-	//~ writeSound(soundData[7]);
-	//~ writeSound(soundData[8]);
-	//~ writeSound(soundData[9]);
-	//~ writeSound(soundData[10]);
-	//~ writeSound(soundData[5]);
-	//~ writeSound(soundData[6]);
-	//~ writeSound(soundData[7]);
-	//~ writeSound(soundData[8]);
-	//~ writeSound(soundData[9]);
-	//~ writeSound(soundData[10]);
-	//~ printWord(*deviceCtrl);
-	printWord(readFifoStatus());
-	prints("\n");
-	
-	//~ volatile u32 *fifoStatus;
-	//~ fifoStatus = (u32*)PIO_0_FIFOLVL;
-	deviceCtrl = (u32*)PIO_0_SM0_INSTRADDR;
-	printWord(*deviceCtrl);
-		prints("\n");
-	while (count!=0)
-	{
-		while ( (readFifoStatus()&0xF) > 7) { }
-		*outputFifo = wavPulse[count&0x4B];
-		//~ *outputFifo = 0xFFFFFFFF;
-		count--;
-	}
-	printWord(*deviceCtrl);
-		prints("\n");
-	prints("sound has been sent!\n");
+	prints("Hello Waveform");
 }
+
+
+
+// Bootrom function: rom_table_lookup
+// Returns the 32 bit pointer into the ROM if found or NULL otherwise.
+//~ typedef void *(*rom_table_lookup_fn)(u16 *table, u32 code);
+
+//~ static void*
+//~ rom_func_lookup(u32 code)
+//~ {
+	//~ rom_table_lookup_fn rom_table_lookup = (rom_table_lookup_fn)0x18;
+	//~ u16 *func_table = (u16 *)0x14;
+	//~ return rom_table_lookup(func_table, code);
+//~ }
+
+//~ static void*
+//~ rom_data_lookup(u32 code)
+//~ {
+	//~ rom_table_lookup_fn rom_table_lookup = (rom_table_lookup_fn)0x18;
+	//~ u16 *data_table = (u16 *)0x16;
+	//~ return rom_table_lookup(data_table, code);
+//~ }
+
+//~ u32 rom_table_code(u8 c1, u8 c2)
+//~ {
+	//~ return (c2 << 8) | c1;
+//~ }
+
+//~ typedef struct {
+	//~ void (*_connect_internal_flash)(void);
+	//~ void (*_flash_exit_xip)(void);
+	//~ void (*_flash_range_erase)(u32 addr, u32 count, u32 block_size, u8 block_cmd);
+	//~ void (*flash_range_program)(u32 addr, u8 *data, u32 count);
+	//~ void (*_flash_flush_cache)(void);
+	//~ void (*_flash_enter_cmd_xip)(void);
+//~ } flashFunctions;
+
+//~ static flashFunctions ffuncs;
+
+//~ static void
+//~ configFlash(void)
+//~ {
+	//~ // grab all function addresses
+	//~ ffuncs._connect_internal_flash = rom_func_lookup(rom_table_code('I','F'));
+	//~ ffuncs._flash_exit_xip = rom_func_lookup(rom_table_code('E','X'));
+	//~ ffuncs._flash_range_erase = rom_func_lookup(rom_table_code('R','E'));
+	//~ ffuncs.flash_range_program = rom_func_lookup(rom_table_code('R','P'));
+	//~ ffuncs._flash_flush_cache = rom_func_lookup(rom_table_code('F','C'));
+	//~ ffuncs._flash_enter_cmd_xip = rom_func_lookup(rom_table_code('C','X'));
+	//~ // following RP2040 data sheet
+	//~ ffuncs._connect_internal_flash();
+	//~ ffuncs._flash_exit_xip();
+	
+	
+	
+	
+//~ }

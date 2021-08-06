@@ -65,27 +65,32 @@
 
 #include "localTypes.h"
 #include "memory.h"
-typedef struct Mem5Link Mem5Link;
-struct Mem5Link {
-  int next;       /* Index of next free chunk */
-  int prev;       /* Index of previous free chunk */
+
+typedef struct MemDLL MemDLL;
+struct MemDLL {
+  MemDLL *next;       /* Index of next free chunk */
+  MemDLL *prev;       /* Index of previous free chunk */
 };
 
 void
 dmaWordForwardCopy(void *src, void *dst, s32 size);
 void
 setZero(void *dst, s32 size);
+void disableZeroizeDMA(void);
+void enableZeroizeDMA(void);
+void prints(u8 *string);
 
 /*
-** Maximum size of any allocation is ((1<<LOGMAX)*mem5.szAtom). Since
-** mem5.szAtom is always at least 8 and 32-bit integers are used,
+** Maximum size of any allocation is ((1<<LOGMAX)*mem.szAtom). Since
+** mem.szAtom is always at least 8 and 32-bit integers are used,
 ** it is not actually possible to reach this limit.
 */
-#define LOGMAX 30
-#define ATOM_SIZE 16
+//~ #define LOGMAX 30
+#define LOGMAX 15 /* pico's memory is much smaller */
+#define ATOM_SIZE 32
 
 /*
-** Masks used for mem5.aCtrl[] elements.
+** Masks used for mem.aCtrl[] elements.
 */
 #define CTRL_LOGSIZE  0x1f    /* Log2 Size of this block */
 #define CTRL_FREE     0x20    /* True if not checked out */
@@ -94,268 +99,349 @@ setZero(void *dst, s32 size);
 #define assert(x) 
 /*
 ** All of the static variables used by this module are collected
-** into a single structure named "mem5".  This is to keep the
+** into a single structure named "mem".  This is to keep the
 ** static variables organized and to reduce namespace pollution
 ** when this module is combined with other in the amalgamation.
 */
-static struct Mem5Global {
-  /*
-  ** Memory available for allocation
-  */
-  int szAtom;      /* Smallest possible allocation in bytes */
-  int nBlock;      /* Number of szAtom sized blocks in zPool */
-  u8 *zPool;       /* Memory available to be allocated */
-  
 
-#if defined(SQLITE_DEBUG) || defined(SQLITE_TEST)
-  /*
-  ** Performance statistics
-  */
-  u64 nAlloc;         /* Total number of calls to malloc */
-  u64 totalAlloc;     /* Total of all malloc calls - includes internal frag */
-  u64 totalExcess;    /* Total internal fragmentation */
-  u32 currentOut;     /* Current checkout, including internal fragmentation */
-  u32 currentCount;   /* Current number of distinct checkouts */
-  u32 maxOut;         /* Maximum instantaneous currentOut */
-  u32 maxCount;       /* Maximum instantaneous currentCount */
-  u32 maxRequest;     /* Largest allocation (exclusive of internal frag) */
-#endif
-  /*
-  ** Space for tracking which blocks are checked out and the size
-  ** of each block.  One byte per block.
-  */
-  u8 *aCtrl;
-  
-  /*
-  ** Lists of free blocks.  aiFreelist[0] is a list of free blocks of
-  ** size mem5.szAtom.  aiFreelist[1] holds blocks of size szAtom*2.
-  ** aiFreelist[2] holds free blocks of size szAtom*4.  And so forth.
-  */
-  int aiFreelist[LOGMAX+1];
+typedef struct MemGlobal
+{
+	MemDLL sentinalNode; /* Sentinal Node used in free lists */
+	u32 nBlock;      /* Number of szAtom sized blocks in zPool */
+	u8 *zPool;       /* Memory available to be allocated */
+	/*
+	** Space for tracking which blocks are checked out and the size
+	** of each block.  One byte per block.
+	*/
+	u8 *aCtrl;
+	//~ MemDLL sentinalNode; /* Sentinal Node used in free lists */
+	/*
+	** Lists of free blocks.  aiFreelist[0] is a list of free blocks of
+	** size mem.szAtom.  aiFreelist[1] holds blocks of size szAtom*2.
+	** aiFreelist[2] holds free blocks of size szAtom*4.  And so forth.
+	*/
+	MemDLL *aiFreelist[LOGMAX+1];
+	void *cached[3];
+} MemGlobal;
 
-} mem5;
+static MemGlobal mem;
 
 /*
-** Assuming mem5.zPool is divided up into an array of Mem5Link
+** Assuming mem.zPool is divided up into an array of memLink
 ** structures, return a pointer to the idx-th such link.
 */
-#define MEM5LINK(idx) ((Mem5Link *)(&mem5.zPool[(idx)*ATOM_SIZE]))
+#define GET_MEMDLL(idx) ((MemDLL *)(&mem.zPool[(idx)*ATOM_SIZE]))
 
 /*
-** Unlink the chunk at mem5.aPool[i] from list it is currently
-** on.  It should be found on mem5.aiFreelist[iLogsize].
+** Unlink the chunk at mem.aPool[i] from list it is currently
+** on.  It should be found on mem.aiFreelist[iLogsize].
 */
-static void memsys5Unlink(int i, int iLogsize){
-  int next, prev;
-  assert( i>=0 && i<mem5.nBlock );
-  assert( iLogsize>=0 && iLogsize<=LOGMAX );
-  assert( (mem5.aCtrl[i] & CTRL_LOGSIZE)==iLogsize );
 
-  next = MEM5LINK(i)->next;
-  prev = MEM5LINK(i)->prev;
-  if( prev<0 ){
-    mem5.aiFreelist[iLogsize] = next;
-  }else{
-    MEM5LINK(prev)->next = next;
-  }
-  if( next>=0 ){
-    MEM5LINK(next)->prev = prev;
-  }
+static void
+memsys5Unlink(MemDLL *l){
+  MemDLL *next, *prev;
+  next = l->next;
+  prev = l->prev;
+  prev->next = next;
+  next->prev = prev;
 }
 
 /*
-** Link the chunk at mem5.aPool[i] so that is on the iLogsize
+** Link the chunk at mem.aPool[i] so that is on the iLogsize
 ** free list.
 */
-static void memsys5Link(int i, int iLogsize){
-  int x;
-  assert( sqlite3_mutex_held(mem5.mutex) );
-  assert( i>=0 && i<mem5.nBlock );
-  assert( iLogsize>=0 && iLogsize<=LOGMAX );
-  assert( (mem5.aCtrl[i] & CTRL_LOGSIZE)==iLogsize );
+static void
+memsys5Link(MemDLL * restrict l, u32 iLogsize, MemDLL ** restrict freeList){
 
-  x = MEM5LINK(i)->next = mem5.aiFreelist[iLogsize];
-  MEM5LINK(i)->prev = -1;
-  if( x>=0 ){
-    assert( x<mem5.nBlock );
-    MEM5LINK(x)->prev = i;
-  }
-  mem5.aiFreelist[iLogsize] = i;
+  l->next = freeList[iLogsize];
+  l->prev = (MemDLL *)&freeList[iLogsize];
+  freeList[iLogsize]->prev = l;
+  freeList[iLogsize] = l;
 }
 
 /*
 ** Return the size of an outstanding allocation, in bytes.
 ** This only works for chunks that are currently checked out.
 */
-static int memsys5Size(void *p){
-  int iSize, i;
-  assert( p!=0 );
-  i = (int)(((u8 *)p-mem5.zPool)/ATOM_SIZE);
-  assert( i>=0 && i<mem5.nBlock );
-  iSize = ATOM_SIZE * (1 << (mem5.aCtrl[i]&CTRL_LOGSIZE));
+static u32 memsys5Size(void *p){
+  u32 iSize, i;
+  i = ((u32)((u8 *)p-mem.zPool)/ATOM_SIZE);
+  iSize = ATOM_SIZE * (1 << mem.aCtrl[i]);
   return iSize;
 }
 
 /*
 ** Return a block of memory of at least nBytes in size.
 ** Return NULL if unable.  Return NULL if nBytes==0.
-**
-** The caller guarantees that nByte is positive.
-**
-** The caller has obtained a mutex prior to invoking this
-** routine so there is never any chance that two or more
-** threads can be in this routine at the same time.
 */
-void *zalloc(int nByte){
-  int i;           /* Index of a mem5.aPool[] slot */
-  int iBin;        /* Index into mem5.aiFreelist[] */
-  int iFullSz;     /* Size of allocation rounded up to power of 2 */
-  int iLogsize;    /* Log2 of iFullSz/POW2_MIN */
+//~ void *zalloc_internal(u32 nByte)
+static void *zalloc_internal(u32 iFullSz, u32 iLogsize)
+{
+	u32 i;           /* Index of a mem.aPool[] slot */
+	u32 iBin;        /* Index into mem.aiFreelist[] */
+	//~ u32 iFullSz;     /* Size of allocation rounded up to power of 2 */
+	//~ u32 iLogsize;    /* Log2 of iFullSz/POW2_MIN */
+	MemDLL *freeNode;
 
-  /* nByte must be a positive */
-  assert( nByte>0 );
-  
-
-  /* No more than 1GiB per allocation */
-  //~ if( nByte > 0x40000000 ) return 0;
+	// if nByte is 0 -> return 0 to be consistent with realloc
+	//~ if (nByte==0) { return 0; }
 
 
-  /* Round nByte up to the next valid power of two */
-  for(iFullSz=ATOM_SIZE,iLogsize=0; iFullSz<nByte; iFullSz*=2,iLogsize++){}
+	/* Round nByte up to the next valid power of two */
+	//~ for(iFullSz=ATOM_SIZE,iLogsize=0; iFullSz<nByte; iFullSz*=2,iLogsize++){}
 
-  /* Make sure mem5.aiFreelist[iLogsize] contains at least one free
-  ** block.  If not, then split a block of the next larger power of
-  ** two in order to create a new free block of size iLogsize.
-  */
-  for(iBin=iLogsize; mem5.aiFreelist[iBin]<0; iBin++){}
-  if( iBin>=LOGMAX ){
-    return 0;
-  }
-  i = mem5.aiFreelist[iBin];
-  memsys5Unlink(i, iBin);
-  
-  // set memory to zero using DMA
-  void *memory = (void*)&mem5.zPool[i*ATOM_SIZE];
-  setZero(memory, iFullSz);
-  
-  while( iBin>iLogsize ){
-    int newSize;
+	/* Make sure mem.aiFreelist[iLogsize] contains at least one free
+	** block.  If not, then split a block of the next larger power of
+	** two in order to create a new free block of size iLogsize.
+	*/
+	for(iBin=iLogsize; mem.aiFreelist[iBin]==&mem.sentinalNode; iBin++){}
+	if( iBin>=LOGMAX ){
+		return 0;
+	}
+	// get free node from free list
+	freeNode = mem.aiFreelist[iBin];
+	// unlink the node
+	memsys5Unlink(freeNode);
 
-    iBin--;
-    newSize = 1 << iBin;
-    mem5.aCtrl[i+newSize] = CTRL_FREE | iBin;
-    memsys5Link(i+newSize, iBin);
-  }
-  mem5.aCtrl[i] = iLogsize;
-	
-  /* Return a pointer to the allocated memory. */
-  return memory;
+	// set memory to zero using DMA
+	void *memory = freeNode;
+	setZero(memory, iFullSz);
+	i = ((u32)((u8 *)memory-mem.zPool)/ATOM_SIZE);
+	mem.aCtrl[i] = iLogsize;
+
+	while( iBin>iLogsize ){
+		u32 newSize;
+		iBin--;
+		newSize = 1 << iBin;
+		mem.aCtrl[i+newSize] = CTRL_FREE + iBin;
+		memsys5Link(GET_MEMDLL(i+newSize), iBin, mem.aiFreelist);
+	}
+
+	/* Return a pointer to the allocated memory. */
+	return memory;
 }
 
 /*
 ** Free an outstanding memory allocation.
 */
-void free(void *pOld){
-  u32 size, iLogsize;
-  int iBlock;
+void free_internal(void *pOld)
+{
+	u32 iLogsize;
+	u32 iBlock;
+	u8 *ctrlMem = mem.aCtrl;
 
   /* Set iBlock to the index of the block pointed to by pOld in 
-  ** the array of mem5.szAtom byte blocks pointed to by mem5.zPool.
+  ** the array of mem.szAtom byte blocks pointed to by mem.zPool.
   */
-  iBlock = (int)(((u8 *)pOld-mem5.zPool)/ATOM_SIZE);
+	//~ if (pOld==0) { return; }
+	iBlock = ((u32)((u8 *)pOld-mem.zPool)/ATOM_SIZE);
+	iLogsize = ctrlMem[iBlock];
+	ctrlMem[iBlock] = CTRL_FREE + iLogsize;
+	while(1) {
+		u32 iBuddy;
+		iBuddy = iBlock ^ (1<<iLogsize);
+		if(iBuddy>=mem.nBlock) { break; }
+		if(ctrlMem[iBuddy]!=(CTRL_FREE + iLogsize)) { break; }
+		memsys5Unlink(GET_MEMDLL(iBuddy));
+		iLogsize++;
+		ctrlMem[iBlock&iBuddy] = CTRL_FREE + iLogsize;
+		ctrlMem[iBlock|iBuddy] = 0;
+		iBlock = iBlock&iBuddy;
+	}
+	memsys5Link(GET_MEMDLL(iBlock), iLogsize, mem.aiFreelist);
+}
 
-  /* Check that the pointer pOld points to a valid, non-free block. */
-  assert( iBlock>=0 && iBlock<mem5.nBlock );
-  assert( ((u8 *)pOld-mem5.zPool)%mem5.szAtom==0 );
-  assert( (mem5.aCtrl[iBlock] & CTRL_FREE)==0 );
+void free(void *pOld)
+{
+	if (pOld==0) { return; }
+	helper_sendMsg1(1+((u32)pOld<<8));
+}
 
-  iLogsize = mem5.aCtrl[iBlock] & CTRL_LOGSIZE;
-  size = 1<<iLogsize;
-  assert( iBlock+size-1<(u32)mem5.nBlock );
+void *zalloc(u32 nByte)
+{
+	u32 iFullSz;     /* Size of allocation rounded up to power of 2 */
+	u32 iLogsize;    /* Log2 of iFullSz/POW2_MIN */
+	// if nByte is 0 -> return 0 to be consistent with realloc
+	if (nByte==0) { return 0; }
+	/* Round nByte up to the next valid power of two */
+	for(iFullSz=ATOM_SIZE,iLogsize=0; iFullSz<nByte; iFullSz*=2,iLogsize++){}
+	if (iFullSz <= ATOM_SIZE*4)
+	{
+		void *cachedMem = mem.cached[iLogsize];
+		if (cachedMem)
+		{
+			helper_sendMsg1(0+(iLogsize<<8));
+			mem.cached[iLogsize] = 0;
+			return cachedMem;
+		}
+	}
+	takeSpinLock(MEMORY_LOCK_NUMBER);
+	void *memory = zalloc_internal(iFullSz, iLogsize);
+	giveSpinLock(MEMORY_LOCK_NUMBER);
+	return memory;
+}
 
+void *fastAlloc(u32 iLogsize)
+{
+	u32 iFullSz=32<<iLogsize;/* Size of allocation rounded up to power of 2 */
+	void *cachedMem = mem.cached[iLogsize];
+	if (cachedMem)
+	{
+		helper_sendMsg1(0+(iLogsize<<8));
+		mem.cached[iLogsize] = 0;
+		return cachedMem;
+	}
+	takeSpinLock(MEMORY_LOCK_NUMBER);
+	void *memory = zalloc_internal(iFullSz, iLogsize);
+	giveSpinLock(MEMORY_LOCK_NUMBER);
+	return memory;
+}
 
-  mem5.aCtrl[iBlock] = CTRL_FREE | iLogsize;
-  //~ while(iLogsize<LOGMAX){
-  while(1){
-    int iBuddy;
-    if( (iBlock>>iLogsize) & 1 ){
-      iBuddy = iBlock - size;
-      assert( iBuddy>=0 );
-    }else{
-      iBuddy = iBlock + size;
-      if( iBuddy>=mem5.nBlock ) break;
-    }
-    if( mem5.aCtrl[iBuddy]!=(CTRL_FREE | iLogsize) ) break;
-    memsys5Unlink(iBuddy, iLogsize);
-    iLogsize++;
-    if( iBuddy<iBlock ){
-      mem5.aCtrl[iBuddy] = CTRL_FREE | iLogsize;
-      mem5.aCtrl[iBlock] = 0;
-      iBlock = iBuddy;
-    }else{
-      mem5.aCtrl[iBlock] = CTRL_FREE | iLogsize;
-      mem5.aCtrl[iBuddy] = 0;
-    }
-    size *= 2;
-  }
-
-  memsys5Link(iBlock, iLogsize);
+void populateCache(u32 iLogsize)
+{
+	u32 iFullSz = ATOM_SIZE << iLogsize;
+	takeSpinLock(MEMORY_LOCK_NUMBER);
+	mem.cached[iLogsize] = zalloc_internal(iFullSz, iLogsize);
+	giveSpinLock(MEMORY_LOCK_NUMBER);
 }
 
 /*
-** Allocate nBytes of memory.
+* Flexible memory allocation function.
+* 1. If pPrior is 0 -> call zalloc.
+* 2. If nBytes is 0 -> call free. 
+* 3. If nBytes > oldSize we get a larger fresh allocation and copy data into it
+* 4. If nBytes <= oldSize/2 we get a smaller allocation and copy into it.
+* 5. Otherwise we return pPrior 
 */
-//~ void *memsys5Malloc(int nBytes){
-  //~ void *p = 0;
-  //~ if( nBytes>0 ){
-    //~ p = memsys5MallocUnsafe(nBytes);
-  //~ }
-  //~ return p; 
-//~ }
+void *realloc(void *pPrior, u32 nBytes){
+	u32   oldSize, copyAmount;
+	void *newMemory;
+	if (pPrior == 0)
+	{
+		return zalloc(nBytes);
+	}
+	if (nBytes == 0)
+	{
+		free(pPrior);
+		return 0;
+	}
+	oldSize = memsys5Size(pPrior);
+	if (nBytes>oldSize)
+	{
+		copyAmount = oldSize;
+	} else if (nBytes <= (oldSize/2)) {
+		copyAmount = nBytes;
+	} else {
+		return pPrior;
+	}
+	// standard realloc logic
+	newMemory = zalloc(nBytes);
+	if (newMemory)
+	{
+		dmaWordForwardCopy(pPrior, newMemory, copyAmount);
+		free(pPrior);
+	}
+	return newMemory;
+}
 
 /*
-** Free memory.
-**
-** The outer layer memory allocator prevents this routine from
-** being called with pPrior==0.
+* Flexible memory allocation function.
+* 1. If pPrior is 0 -> call zalloc.
+* 2. If nBytes is 0 -> call free. 
+* 3. If nBytes > oldSize we get a larger fresh allocation and copy data into it
+* 4. If nBytes <= oldSize/2 we get a smaller allocation and copy into it.
+* 5. Otherwise we return pPrior 
 */
-//~ void memsys5Free(void *pPrior){
-  //~ assert( pPrior!=0 );
-  //~ memsys5FreeUnsafe(pPrior); 
-//~ }
-
-/*
-** Change the size of an existing memory allocation.
-**
-** The outer layer memory allocator prevents this routine from
-** being called with pPrior==0.  
-**
-** nBytes is always a value obtained from a prior call to
-** memsys5Round().  Hence nBytes is always a non-negative power
-** of two.  If nBytes==0 that means that an oversize allocation
-** (an allocation larger than 0x40000000) was requested and this
-** routine should return 0 without freeing pPrior.
-*/
-void *realloc(void *pPrior, int nBytes){
-  int nOld;
-  void *p;
-  assert( pPrior!=0 );
-  assert( (nBytes&(nBytes-1))==0 );  /* EV: R-46199-30249 */
-  assert( nBytes>=0 );
-  if( nBytes==0 ){
-    return 0;
-  }
-  nOld = memsys5Size(pPrior);
-  if( nBytes<=nOld ){
-    return pPrior;
-  }
-  p = zalloc(nBytes);
-  if( p ){
-    //~ memcpy(p, pPrior, nOld);
-    dmaWordForwardCopy(pPrior, p, nOld);
-    free(pPrior);
-  }
-  return p;
+void *realloc2(void *pPrior, u32 nBytes){
+	u32   oldSize, copyAmount;
+	void *newMemory;
+	if (pPrior == 0)
+	{
+		return zalloc(nBytes);
+	}
+	if (nBytes == 0)
+	{
+		free(pPrior);
+		return 0;
+	}
+	oldSize = memsys5Size(pPrior);
+	if (nBytes>oldSize)
+	{
+		copyAmount = oldSize;
+	} else if (nBytes <= (oldSize/2)) {
+		copyAmount = nBytes;
+	} else {
+		return pPrior;
+	}
+	// What comes next is a special case of a power of two allocator for realloc
+	// We are going to free the old pointer BEFORE new allocation!!
+	// 1. Growing the current allocation: the current allocation could be a sub-
+	// set of the next allocation. Because they are all a power of 2 any NEW
+	// memory will untouched, meaning if it overlaps as all it will be in some
+	// subsection (half, quarter,etc) therefore copying the data has no risk of
+	// overwriting itself, we can use a forward copy.
+	// 2. Shrinking the current allocation: again the same principle applies
+	// a symetric subsection of the data would be needed and copying it will not
+	// overwrite it mid copy.
+	// Now that we know copying is ok we have another problem, zalloc will zero
+	// the memory, in order to stop this we must disable the zeroize DMA, then
+	// reprogram it for any new section of memory, then re-enable it.
+	// What about the meta data that is used by free? This will overwrite the 
+	// first 2 4 byte chunks (the size of pointers) so we will copy them out
+	// first before calling free.
+	// This opens the possibilty that the returned memory is the same pointer.
+	// In this case we only need to replace the 2 pointers of data and return.
+	{
+		u32 zeroizeAmount, newSize, reallocFail = 0;
+		void *data1, *data2;
+		void **tmpPtr = pPrior;
+		u8   *zeroizeTarget;
+		data1 = tmpPtr[0];
+		data2 = tmpPtr[1];
+		takeSpinLock(MEMORY_LOCK_NUMBER);
+		free_internal(pPrior);
+		giveSpinLock(MEMORY_LOCK_NUMBER);
+		disableZeroizeDMA();
+		newMemory = zalloc(nBytes);
+		if (newMemory == 0)
+		{
+			// we failed to get a new allocation, but we have gotten rid of our
+			// previous allocation. We need to regenerate it and give it back
+			newMemory = zalloc(oldSize);
+			reallocFail = 1;
+		}
+		// we have a new piece of memory, copy old data out
+		dmaWordForwardCopy(pPrior, newMemory, copyAmount);
+		// replace memory used by allocator
+		tmpPtr = newMemory;
+		tmpPtr[0] = data1;
+		tmpPtr[1] = data2;
+		// we now have an allocation
+		newSize = memsys5Size(newMemory);
+		zeroizeTarget = newMemory;
+		zeroizeTarget += oldSize;
+		zeroizeAmount = 0;
+		if (newSize > oldSize)
+		{
+			zeroizeAmount = newSize-oldSize;
+		}
+		
+		//~ if (newMemory != pPrior)
+		//~ {
+			// we have a new piece of memory, copy rest out
+			//~ u8 *copyDestintation = newMemory;
+			//~ pPrior = ((u8*)pPrior) + (sizeof(void*)*2);
+			//~ copyDestintation = copyDestintation + (sizeof(void*)*2);
+			//~ copyAmount = copyAmount-(sizeof(void*)*2);
+			//~ dmaWordForwardCopy(pPrior, copyDestintation, copyAmount);
+		//~ } else {
+			// if we got the same memory back we are done
+			//~ prints("pointer reused on return!\n");
+		//~ }
+		enableZeroizeDMA();
+		setZero(zeroizeTarget, zeroizeAmount);
+		return ((u8*)newMemory) + reallocFail;
+	}
 }
 
 /*
@@ -396,54 +482,35 @@ static inline int memsys5Log(int iValue){
 ** This routine is not threadsafe.  The caller must be holding a mutex
 ** to prevent multiple threads from entering at the same time.
 */
-int memsys5Init(void){
-  int ii;            /* Loop counter */
-  //~ int nByte;         /* Number of bytes of memory available to this allocator */
-  u8 *zByte;         /* Memory usable by this allocator */
-  //~ int nMinLog;       /* Log base 2 of minimum allocation size in bytes */
-  int iOffset;       /* An offset into mem5.aCtrl[] */
+void memSysInit(void)
+{
+	s32 ii;            /* Loop counter */
+	u32 iOffset;       /* An offset into mem.aCtrl[] */
 
-  /* The size of a Mem5Link object must be a power of two.  Verify that
-  ** this is case.
-  */
-  assert( (sizeof(Mem5Link)&(sizeof(Mem5Link)-1))==0 );
+	mem.nBlock = 6950; // heapsize / (ATOM+1)
+	mem.zPool = (u8*)0x20008000; // start of memory
+	mem.aCtrl = &mem.zPool[mem.nBlock*ATOM_SIZE]; // start of control
 
-  //~ nByte = sqlite3GlobalConfig.nHeap;
-  //~ zByte = (u8*)sqlite3GlobalConfig.pHeap;
-  //~ nByte = 229364;
-  zByte = (u8*)0x20008000;
-  assert( zByte!=0 );  /* sqlite3_config() does not allow otherwise */
-
-  /* boundaries on sqlite3GlobalConfig.mnReq are enforced in sqlite3_config() */
-  //~ nMinLog = memsys5Log(sqlite3GlobalConfig.mnReq);
-  //~ nMinLog = 4;
-  mem5.szAtom = ATOM_SIZE;
-  //~ while( (int)sizeof(Mem5Link)>mem5.szAtom ){
-    //~ mem5.szAtom = mem5.szAtom << 1;
-  //~ }
-
-  //~ mem5.nBlock = (nByte / (mem5.szAtom+sizeof(u8)));
-  //~ mem5.nBlock = (s32)__heapSize / 17;
-  mem5.nBlock = 13492;
-  mem5.zPool = zByte;
-  mem5.aCtrl = (u8 *)&mem5.zPool[mem5.nBlock*ATOM_SIZE];
-
-  for(ii=0; ii<LOGMAX; ii++){
-    mem5.aiFreelist[ii] = -1;
-  }
-  mem5.aiFreelist[LOGMAX] = 1;
-
-  iOffset = 0;
-  for(ii=LOGMAX; ii>=0; ii--){
-    int nAlloc = (1<<ii);
-    if( (iOffset+nAlloc)<=mem5.nBlock ){
-      mem5.aCtrl[iOffset] = ii | CTRL_FREE;
-      memsys5Link(iOffset, ii);
-      iOffset += nAlloc;
-    }
-    assert((iOffset+nAlloc)>mem5.nBlock);
-  }
-
-  return 0;
+	// initialize free lists to sentinal
+	for(ii=0; ii<LOGMAX; ii++){
+	mem.aiFreelist[ii] = &mem.sentinalNode;
+	}
+	// set sentinal free list to a value other than sentinal node
+	mem.aiFreelist[LOGMAX] = (MemDLL*)&mem.aiFreelist[LOGMAX];
+	// fill free lists with largest possible blocks of powers of 2
+	iOffset = 0;
+	for(ii=LOGMAX; ii>=0; ii--)
+	{
+		int nAlloc = (1<<ii);
+		if( (iOffset+nAlloc)<=mem.nBlock ){
+			mem.aCtrl[iOffset] = ii + CTRL_FREE;
+			memsys5Link(GET_MEMDLL(iOffset), ii, mem.aiFreelist);
+			iOffset += nAlloc;
+		}
+	}
+	// pre-populate cache
+	mem.cached[0] = zalloc_internal(32, 0);
+	mem.cached[1] = zalloc_internal(64, 1);
+	mem.cached[2] = zalloc_internal(128, 2);
+	return;
 }
-
