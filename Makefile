@@ -9,6 +9,11 @@ LOPS = -nostdlib -nostartfiles
 LOCAL_TOOL_PATH = ../tool/gcc-arm-none-eabi/bin/
 #~ LOCAL_TOOL_PATH = 
 
+# Windows Drive Letter (eg: D:\ == d)
+DRIVE ?= d
+UF2_TARGET_DIR = /mnt/$(DRIVE)
+
+
 all : program.uf2 
 
 program.uf2 : program.elf picoUF2
@@ -42,6 +47,9 @@ avl.o : avl.c Makefile
 program.c: program_src.c Makefile parser.c pio.c helperCpu.c
 	re2c -W -i -s program_src.c -o program.c
 
-testRun: program.uf2
-	sudo mount -t drvfs d: /mnt/d
-	cp program.uf2 /mnt/d
+$(UF2_TARGET_DIR):
+	mkdir -p UF2_TARGET_DIR
+
+testRun: program.uf2 | $(UF2_TARGET_DIR)
+	sudo mount -t drvfs $(DRIVE): $(UF2_TARGET_DIR)
+	cp program.uf2 $(UF2_TARGET_DIR)
