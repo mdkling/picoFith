@@ -21,10 +21,26 @@ enum {
 	fithAdd,
 	fithSub,
 	fithMul,
+	fithReturn0,
+	fithReturn1,
+	fithReturn2,
+	fithReturn3,
+	fithReturn4,
+	fithReturn5,
+	fithReturn6,
+	fithReturn7,
+	fithReturn8,
+	fithCallFunc0,
+	fithCallFunc1,
+	fithCallFunc2,
+	fithCallFunc3,
+	fithCallFunc4,
+	fithCallFunc5,
+	fithCallFunc6,
+	fithCallFunc7,
+	fithCallFunc8,
 	fithDiv,
 	fithMod,
-	fithReturn,
-	fithCallFunc,
 	fithDup,
 	fithJump,
 	fithGreaterThanJump,
@@ -39,6 +55,7 @@ enum {
 	fithFree,
 	fithRealloc,
 	fithBitwiseNot,
+	fithNegate,
 	fithBitwiseAnd,
 	fithBitwiseOr,
 	fithBitwiseXor,
@@ -48,6 +65,36 @@ enum {
 	fithOver,
 	fithLoadGlobal,
 	fithStoreGlobal,
+	fithLoadLocal0,
+	fithLoadLocal1,
+	fithLoadLocal2,
+	fithLoadLocal3,
+	fithLoadLocal4,
+	fithLoadLocal5,
+	fithLoadLocal6,
+	fithLoadLocal7,
+	fithStoreLocal0,
+	fithStoreLocal1,
+	fithStoreLocal2,
+	fithStoreLocal3,
+	fithStoreLocal4,
+	fithStoreLocal5,
+	fithStoreLocal6,
+	fithStoreLocal7,
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	
 };
 
@@ -85,6 +132,7 @@ typedef struct fithLexState {
 	u8         pad3;
 	u8        *outBufferStart;
 	u8        *outBufferCursor;
+	u8        *currentFunctionOut;
 	s32        globalsBufferSize;
 	avlNode   *wordTreeRoot;
 	avlNode   *localVarsRoot;
@@ -133,7 +181,7 @@ fithRegistersInit(void)
 {
 	fithExecutionState.globals = zalloc(32);
 	fithExecutionState.returnStack = zalloc(64);
-	fithExecutionState.bottomOfExprStack = zalloc(64);
+	fithExecutionState.bottomOfExprStack = zalloc(64*4);
 	fithExecutionState.currentStackPtr = fithExecutionState.bottomOfExprStack;
 }
 
@@ -229,6 +277,7 @@ writeInteger(u8 *out, u32 val)
 	word_definition = word "{";
 	var_declaration = word "$";
 	var_assign = word "=";
+	var_decl_assign = word "$=";
 	const_declaration = word ":=";
 	word_increment = word "++";
 	function_call_addr = "@" word ;
@@ -289,6 +338,11 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	
 	"realloc" {
 		*out++ = fithRealloc;
+		return out;
+	}
+	
+	"neg" {
+		*out++ = fithNegate;
 		return out;
 	}
 	
@@ -411,7 +465,6 @@ loop:
 	}
 	
 	integer {
-		//~ PRINT_STRING("integer detected\n");
 		s32 val = s2i(start);
 		if (val > 8 || val < 0)
 		{
@@ -419,8 +472,6 @@ loop:
 		} else {
 			*out++ = val;
 		}
-		//~ printWord(val);
-		//~ PRINT_STRING("\n");
 		goto loop;
 	}
 	
@@ -450,41 +501,7 @@ loop:
 	}
 	
 	"}" {
-		s32 blockType = fls.blockStack[--fls.blockStackIndex].blockType;
-		if (blockType == BLOCK_CJUMP)
-		{
-			u8 *jout = fls.blockStack[fls.blockStackIndex].savedCursor;
-			s32 difference = out - jout;
-			*(jout-2)= difference & 0xFF;
-			*(jout-1) = (difference>>8) & 0xFF;
-		} else if (blockType == BLOCK_ELSE) {
-			u8 *jout = fls.blockStack[fls.blockStackIndex].savedCursor;
-			s32 difference = out - jout;
-			*(jout+1)= difference & 0xFF;
-			*(jout+2) = (difference>>8) & 0xFF;
-			// wrap up else chain if there
-			while (fls.blockStack[fls.blockStackIndex-1].blockType==BLOCK_ELSE)
-			{
-				jout = fls.blockStack[--fls.blockStackIndex].savedCursor;
-				difference = out - jout;
-				*(jout+1)= difference & 0xFF;
-				*(jout+2) = (difference>>8) & 0xFF;
-			}
-		} else if (blockType == BLOCK_FUNCTION) {
-			// output return
-			*out++ = fithReturn+fls.numLocalVars;
-			fls.insideFunction = 0;
-			fls.numLocalVars = 0;
-			if (fls.blockStackIndex != 0)
-			{
-				prints("WARNING: word defined within a block. Probably wrong.");
-			}
-			// move start forward so we save the function we created
-			prints("size of word:");
-			printWord(out - fls.outBufferStart);
-			prints("\n");
-			fls.outBufferStart  = out;
-		}
+		out = parseCloseBlock(out);
 		goto loop;
 	}
 	
@@ -569,64 +586,7 @@ loop:
 	// and if we are defining a function we are in that context otherwise we
 	// are in the global context.
 	var_declaration {
-		if (fls.insideFunction)
-		{
-			// we are inside a function, check local context
-			avlNode *retNode = avl_find(
-				fls.localVarsRoot,     // pointer to tree
-				start,      // pointer to string
-				YYCURSOR - start - 1);  // length of string (255 max)
-			if (retNode)
-			{
-				// local already exists
-				prints("local variable ");
-				uartTX(start, YYCURSOR - start - 1);
-				prints(" already exists.\n");
-			} else {
-				// local does not exist
-				s32 localIndex = fls.numLocalVars++;
-				// check if we are over the limit of locals
-				if (fls.numLocalVars > 8)
-				{
-					prints("Error: Cannot make more than 8 locals.\n");
-					goto loop;
-				}
-				// save off local index
-				(void)avl_insert(
-					&fls.wordTreeRoot,   // pointer memory holding address of tree
-					start,     // pointer to string
-					YYCURSOR - start - 1,  // length of string (255 max)
-					(void*)(localIndex+(1<<30)) );   // value to be stored
-			}
-		} else {
-			// we are not inside a function check global context
-			avlNode *retNode = avl_find(
-				fls.wordTreeRoot,     // pointer to tree
-				start,      // pointer to string
-				YYCURSOR - start - 1);  // length of string (255 max)
-			if (retNode)
-			{
-				// global already exists
-				prints("global variable ");
-				uartTX(start, YYCURSOR - start - 1);
-				prints(" already exists.\n");
-			} else {
-				// global does not exist
-				s32 globalIndex = fls.numGlobalVars++;
-				// check if we need to expand global array
-				if (fls.numGlobalVars > fls.globalsBufferSize)
-				{
-					fls.globalsBufferSize*=2;
-					fithExecutionState.globals = realloc(fithExecutionState.globals, fls.globalsBufferSize);
-				}
-				// save off global index
-				(void)avl_insert(
-					&fls.wordTreeRoot,   // pointer memory holding address of tree
-					start,     // pointer to string
-					YYCURSOR - start - 1,  // length of string (255 max)
-					(void*)(globalIndex+(2<<30)) );   // value to be stored
-			}
-		}
+		parseVarDecl(start, YYCURSOR);
 		goto loop;
 	}
 	
@@ -636,60 +596,18 @@ loop:
 	}
 	
 	var_assign {
-		if (fls.insideFunction)
-		{
-			// we are inside a function, check local context
-			avlNode *retNode = avl_find(
-				fls.localVarsRoot,     // pointer to tree
-				start,      // pointer to string
-				YYCURSOR - start - 1);  // length of string (255 max)
-			if (retNode)
-			{
-				// variable exists, emit store
-				u32 rawVal = (u32)retNode->value;
-				//~ *out++ = fithLoadGlobal;
-				*out++ = (rawVal<<2)>>2;
-				goto loop;
-			}
-		}
-		// we are not inside a function check global context
-		avlNode *retNode = avl_find(
-			fls.wordTreeRoot,     // pointer to tree
-			start,      // pointer to string
-			YYCURSOR - start - 1);  // length of string (255 max)
-		if (retNode)
-		{
-			// variable exists, emit store
-			u32 rawVal = (u32)retNode->value;
-			*out++ = fithStoreGlobal;
-			*out++ = (rawVal<<2)>>2;
-		} else {
-			// variable does not exist
-			prints("variable ");
-			uartTX(start, YYCURSOR - start - 1);
-			prints(" does not exist.\n");
-		}
+		out = parseVarAssignment(start, YYCURSOR, out);
+		goto loop;
+	}
+	
+	var_decl_assign {
+		parseVarDecl(start, YYCURSOR - 1);
+		out = parseVarAssignment(start, YYCURSOR - 1, out);
 		goto loop;
 	}
 
 	word_definition {
-		//~ u32 timerVal = readSysTimerVal(0);
-		avlNode *retNode = avl_insert(
-			&fls.wordTreeRoot,   // pointer memory holding address of tree
-			start,     // pointer to string
-			YYCURSOR - start - 1,  // length of string (255 max)
-			out );   // value to be stored
-		//~ printWord(-readSysTimerVal(timerVal));
-		//~ prints("\n");
-		fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_FUNCTION;
-		fls.insideFunction = 1;
-		if (retNode) {
-			PRINT_STRING("word already existed\n");
-		} else {
-			prints("saving start of word: ");
-			uartTX(start, YYCURSOR - start);
-			PRINT_STRING("\n");
-		}
+		parseWordDefinition(out, start, YYCURSOR);
 		goto loop;
 	}
 	

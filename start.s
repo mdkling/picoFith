@@ -759,10 +759,26 @@ fithVMjumpTable:
 .word fithAdd
 .word fithSub
 .word fithMul
+.word fithReturn0
+.word fithReturn1
+.word fithReturn2
+.word fithReturn3
+.word fithReturn4
+.word fithReturn5
+.word fithReturn6
+.word fithReturn7
+.word fithReturn8
+.word fithCallFunc0
+.word fithCallFunc1
+.word fithCallFunc2
+.word fithCallFunc3
+.word fithCallFunc4
+.word fithCallFunc5
+.word fithCallFunc6
+.word fithCallFunc7
+.word fithCallFunc8
 .word fithDiv
 .word fithMod
-.word fithReturn
-.word fithCallFunc
 .word fithDup
 .word fithJump
 .word fithGreaterThanJump
@@ -777,6 +793,7 @@ fithVMjumpTable:
 .word fithFree
 .word fithRealloc
 .word fithBitwiseNot
+.word fithNegate
 .word fithBitwiseAnd
 .word fithBitwiseOr
 .word fithBitwiseXor
@@ -786,6 +803,22 @@ fithVMjumpTable:
 .word fithOver
 .word fithLoadGlobal
 .word fithStoreGlobal
+.word fithLoadLocal0
+.word fithLoadLocal1
+.word fithLoadLocal2
+.word fithLoadLocal3
+.word fithLoadLocal4
+.word fithLoadLocal5
+.word fithLoadLocal6
+.word fithLoadLocal7
+.word fithStoreLocal0
+.word fithStoreLocal1
+.word fithStoreLocal2
+.word fithStoreLocal3
+.word fithStoreLocal4
+.word fithStoreLocal5
+.word fithStoreLocal6
+.word fithStoreLocal7
 
 
 .balign 4
@@ -935,6 +968,175 @@ fithMul:
 	NEXT_INSTRUCTION
 
 .thumb_func
+fithReturn0:
+	POP_IP
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithReturn1:
+	add  sp, #4
+	POP_IP
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithReturn2:
+	add  sp, #8
+	POP_IP
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithReturn3:
+	add  sp, #12
+	POP_IP
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithReturn4:
+	add  sp, #16
+	POP_IP
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithReturn5:
+	add  sp, #20
+	POP_IP
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithReturn6:
+	add  sp, #24
+	POP_IP
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithReturn7:
+	add  sp, #28
+	POP_IP
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithReturn8:
+	add  sp, #32
+	POP_IP
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithCallFunc0:
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	adds r5, 3
+	PUSH_IP
+	adds r5, r2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithCallFunc1:
+	sub  sp, #4
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	adds r5, 3
+	PUSH_IP
+	adds r5, r2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithCallFunc2:
+	sub  sp, #8
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	adds r5, 3
+	PUSH_IP
+	adds r5, r2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithCallFunc3:
+	sub  sp, #12
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	adds r5, 3
+	PUSH_IP
+	adds r5, r2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithCallFunc4:
+	sub  sp, #16
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	adds r5, 3
+	PUSH_IP
+	adds r5, r2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithCallFunc5:
+	sub  sp, #20
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	adds r5, 3
+	PUSH_IP
+	adds r5, r2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithCallFunc6:
+	sub  sp, #24
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	adds r5, 3
+	PUSH_IP
+	adds r5, r2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithCallFunc7:
+	sub  sp, #28
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	adds r5, 3
+	PUSH_IP
+	adds r5, r2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithCallFunc8:
+	sub  sp, #32
+	ldrb r2, [r5, #1]
+	ldrb r1, [r5, #2]
+	lsls r1, 8
+	adds r2, r1
+	sxth r2, r2
+	adds r5, 3
+	PUSH_IP
+	adds r5, r2
+	NEXT_INSTRUCTION
+
+.thumb_func
 fithDiv:
 	POP_SCATCH1
 	ldr  r2, = SIO_BASE
@@ -963,23 +1165,6 @@ fithMod:
 	movs r0, r0			;@ 8
 	ldr  r0, [r0, #SIO_REMAINDER]
 	bx   r2
-
-.thumb_func
-fithReturn:
-	POP_IP
-	NEXT_INSTRUCTION
-
-.thumb_func
-fithCallFunc:
-	ldrb r2, [r5, #1]
-	ldrb r1, [r5, #2]
-	lsls r1, 8
-	adds r2, r1
-	sxth r2, r2
-	adds r5, 3
-	PUSH_IP
-	adds r5, r2
-	NEXT_INSTRUCTION
 
 .thumb_func
 fithDup:
@@ -1135,6 +1320,12 @@ fithBitwiseNot:
 	NEXT_INSTRUCTION
 
 .thumb_func
+fithNegate:
+	rsbs r0, r0, #0
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
 fithBitwiseAnd:
 	POP_SCATCH1
 	ands r0, r1
@@ -1206,6 +1397,132 @@ fithStoreGlobal:
 	str  r0, [r2, r1]
 	POP_TOS
 	adds r5, 2
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLoadLocal0:
+	PUSH_TOS
+	ldr  r0, [sp, #0]
+	;@~ push {r0}
+	;@~ bl   printWord
+	;@~ movs r0, 'L'
+	;@~ bl   print1Byte
+	;@~ movs r0, '\n'
+	;@~ bl   print1Byte
+	;@~ pop  {r0}
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLoadLocal1:
+	PUSH_TOS
+	ldr  r0, [sp, #4]
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLoadLocal2:
+	PUSH_TOS
+	ldr  r0, [sp, #8]
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLoadLocal3:
+	PUSH_TOS
+	ldr  r0, [sp, #12]
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLoadLocal4:
+	PUSH_TOS
+	ldr  r0, [sp, #16]
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLoadLocal5:
+	PUSH_TOS
+	ldr  r0, [sp, #20]
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLoadLocal6:
+	PUSH_TOS
+	ldr  r0, [sp, #24]
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithLoadLocal7:
+	PUSH_TOS
+	ldr  r0, [sp, #28]
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithStoreLocal0:
+	str  r0, [sp, #0]
+	;@~ push {r0}
+	;@~ bl   printWord
+	;@~ movs r0, 'S'
+	;@~ bl   print1Byte
+	;@~ movs r0, '\n'
+	;@~ bl   print1Byte
+	;@~ pop  {r0}
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithStoreLocal1:
+	str  r0, [sp, #4]
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithStoreLocal2:
+	str  r0, [sp, #8]
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithStoreLocal3:
+	str  r0, [sp, #12]
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithStoreLocal4:
+	str  r0, [sp, #16]
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithStoreLocal5:
+	str  r0, [sp, #20]
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithStoreLocal6:
+	str  r0, [sp, #24]
+	POP_TOS
+	adds r5, 1
+	NEXT_INSTRUCTION
+
+.thumb_func
+fithStoreLocal7:
+	str  r0, [sp, #28]
+	POP_TOS
+	adds r5, 1
 	NEXT_INSTRUCTION
 
 .balign 4

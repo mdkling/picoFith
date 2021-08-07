@@ -3,6 +3,24 @@
 static u8*
 parseWord(u8 *out, u8 *start, u8 *YYCURSOR)
 {
+	if (fls.insideFunction)
+	{
+		// we are inside a function, check local context
+		avlNode *retNode = avl_find(
+			fls.localVarsRoot,     // pointer to tree
+			start,      // pointer to string
+			YYCURSOR - start);  // length of string (255 max)
+		if (retNode)
+		{
+			prints("local: ");
+			uartTX(start, YYCURSOR - start);
+			prints(" is being loaded.\n");
+			// variable exists, emit load
+			u32 rawVal = (u32)retNode->value;
+			*out++ = fithLoadLocal0 +  rawVal;
+			return out;
+		}
+	}
 	avlNode *retNode = avl_find(
 		fls.wordTreeRoot,     // pointer to tree
 		start,      // pointer to string
@@ -13,20 +31,205 @@ parseWord(u8 *out, u8 *start, u8 *YYCURSOR)
 		prints("\" is not defined.\n");
 	} else {
 		u32 rawVal = (u32)retNode->value;
-		if (rawVal>>30 == 0) // WORD_FUNCTION
+		if((u8*)rawVal==fls.currentFunctionOut){rawVal+=fls.numLocalVars<<28;}
+		prints("num locals for call ");
+		printWord((rawVal>>28));
+		prints("\n");
+		if (rawVal>>31 == 0) // WORD_FUNCTION
 		{
-			s32 difference = ((u8*)rawVal) - (out + 3);
-			*out++ = fithCallFunc;
+			u8  *startOfFunc = (u8*)(((rawVal<<4)>>4)+0x20000000);
+			s32 difference = startOfFunc - (out + 3);
+			*out++ = fithCallFunc0 + (rawVal>>28);
 			*out++ = difference & 0xFF;
 			*out++ = (difference>>8) & 0xFF;
-		} else if (rawVal>>30 == 1) { // WORD_LOCAL
-			
-		} else if (rawVal>>30 == 2) { // WORD_GLOBAL
+		} else if (rawVal>>31 == 1) { // WORD_GLOBAL_VAR
 			*out++ = fithLoadGlobal;
-			*out++ = (rawVal<<2)>>2;
-		} else {                    // WORD_CONST
-			
+			*out++ = (rawVal<<1)>>1;
 		}
+	}
+	return out;
+}
+
+static void
+parseWordDefinition(u8 *out, u8 *start, u8 *YYCURSOR)
+{
+	void *functionStart = (void*)(((u32)out<<4)>>4);
+	avlNode *retNode = avl_insert(
+		&fls.wordTreeRoot,   // pointer memory holding address of tree
+		start,     // pointer to string
+		YYCURSOR - start - 1,  // length of string (255 max)
+		functionStart );   // value to be stored
+	if (retNode) {
+		prints("word already existed\n");
+	}
+	fls.insideFunction = 1; // set flag we are inside a function
+	fls.currentFunctionOut = functionStart;
+	// save off node pointer into the block stack
+	fls.blockStack[fls.blockStackIndex].savedCursor = (u8*)
+		avl_find(
+			fls.wordTreeRoot,
+			start,
+			YYCURSOR - start - 1);
+	// label block as function
+	fls.blockStack[fls.blockStackIndex++].blockType = BLOCK_FUNCTION;
+}
+
+static u8*
+parseVarAssignment(u8 *start, u8 *YYCURSOR, u8 *out)
+{
+	if (fls.insideFunction)
+	{
+		// we are inside a function, check local context
+		avlNode *retNode = avl_find(
+			fls.localVarsRoot,     // pointer to tree
+			start,      // pointer to string
+			YYCURSOR - start - 1);  // length of string (255 max)
+		if (retNode)
+		{
+			// variable exists, emit store
+			u32 rawVal = (u32)retNode->value;
+			*out++ = fithStoreLocal0 + rawVal;
+			return out;
+		}
+	}
+	// we are not inside a function check global context
+	avlNode *retNode = avl_find(
+		fls.wordTreeRoot,     // pointer to tree
+		start,      // pointer to string
+		YYCURSOR - start - 1);  // length of string (255 max)
+	if (retNode)
+	{
+		// variable exists, emit store
+		u32 rawVal = (u32)retNode->value;
+		*out++ = fithStoreGlobal;
+		*out++ = (rawVal<<1)>>1;
+	} else {
+		// variable does not exist
+		prints("variable ");
+		uartTX(start, YYCURSOR - start - 1);
+		prints(" does not exist.\n");
+	}
+	return out;
+}
+
+static void
+parseVarDecl(u8 *start, u8 *YYCURSOR)
+{
+	if (fls.insideFunction)
+	{
+		// we are inside a function, check local context
+		avlNode *retNode = avl_find(
+			fls.localVarsRoot,     // pointer to tree
+			start,      // pointer to string
+			YYCURSOR - start - 1);  // length of string (255 max)
+		if (retNode)
+		{
+			// local already exists
+			prints("local variable ");
+			uartTX(start, YYCURSOR - start - 1);
+			prints(" already exists.\n");
+		} else {
+			prints("local variable ");
+			uartTX(start, YYCURSOR - start - 1);
+			prints(" is being created.\n");
+			// local does not exist
+			s32 localIndex = fls.numLocalVars++;
+			// check if we are over the limit of locals
+			if (fls.numLocalVars > 8)
+			{
+				prints("Error: Cannot make more than 8 locals.\n");
+				return;
+			}
+			// save off local index
+			(void)avl_insert(
+				&fls.localVarsRoot,   // pointer memory holding address of tree
+				start,     // pointer to string
+				YYCURSOR - start - 1,  // length of string (255 max)
+				(void*)localIndex );   // value to be stored
+		}
+	} else {
+		// we are not inside a function check global context
+		avlNode *retNode = avl_find(
+			fls.wordTreeRoot,     // pointer to tree
+			start,      // pointer to string
+			YYCURSOR - start - 1);  // length of string (255 max)
+		if (retNode)
+		{
+			// global already exists
+			prints("global variable ");
+			uartTX(start, YYCURSOR - start - 1);
+			prints(" already exists.\n");
+		} else {
+			// global does not exist
+			s32 globalIndex = fls.numGlobalVars++;
+			// check if we need to expand global array
+			if (fls.numGlobalVars > fls.globalsBufferSize)
+			{
+				fls.globalsBufferSize*=2;
+				fithExecutionState.globals = realloc(fithExecutionState.globals, fls.globalsBufferSize);
+			}
+			// save off global index
+			(void)avl_insert(
+				&fls.wordTreeRoot,   // pointer memory holding address of tree
+				start,     // pointer to string
+				YYCURSOR - start - 1,  // length of string (255 max)
+				(void*)(globalIndex+(1<<31)) );   // value to be stored
+		}
+	}
+}
+
+static u8*
+parseCloseBlock(u8 *out)
+{
+	s32 blockType = fls.blockStack[--fls.blockStackIndex].blockType;
+	if (blockType == BLOCK_CJUMP)
+	{
+		u8 *jout = fls.blockStack[fls.blockStackIndex].savedCursor;
+		s32 difference = out - jout;
+		*(jout-2)= difference & 0xFF;
+		*(jout-1) = (difference>>8) & 0xFF;
+	} else if (blockType == BLOCK_ELSE) {
+		u8 *jout = fls.blockStack[fls.blockStackIndex].savedCursor;
+		s32 difference = out - jout;
+		*(jout+1)= difference & 0xFF;
+		*(jout+2) = (difference>>8) & 0xFF;
+		// wrap up else chain if there
+		while (fls.blockStack[fls.blockStackIndex-1].blockType==BLOCK_ELSE)
+		{
+			jout = fls.blockStack[--fls.blockStackIndex].savedCursor;
+			difference = out - jout;
+			*(jout+1)= difference & 0xFF;
+			*(jout+2) = (difference>>8) & 0xFF;
+		}
+	} else if (blockType == BLOCK_FUNCTION) {
+		// output return
+		*out++ = fithReturn0+fls.numLocalVars;
+		prints("num locals for return ");
+		printWord(fls.numLocalVars);
+		prints("\n");
+		// pack number of locals into address
+		avlNode *retNode=(void*)fls.blockStack[fls.blockStackIndex].savedCursor;
+		u32 rawVal = (u32)retNode->value;
+		rawVal = (rawVal<<4)>>4;
+		rawVal += fls.numLocalVars << 28;
+		retNode->value = (void*)rawVal;
+		// set we are not in a function anymore
+		fls.insideFunction = 0;
+		fls.currentFunctionOut = 0;
+		// reset num locals to zero
+		fls.numLocalVars = 0;
+		// clear out the locals tree
+		avl_freeAll(fls.localVarsRoot);
+		fls.localVarsRoot = 0;
+		if (fls.blockStackIndex != 0)
+		{
+			prints("WARNING: word defined within a block. Probably wrong.");
+		}
+		prints("size of word:");
+		printWord(out - fls.outBufferStart);
+		prints("\n");
+		// move start forward so we save the function we created
+		fls.outBufferStart  = out;
 	}
 	return out;
 }
@@ -36,6 +239,7 @@ parseWord(u8 *out, u8 *start, u8 *YYCURSOR)
 static void
 memoryTesting(void)
 {
+	#if 0
 	// test memory under stress
 	u32 *memory1, *memory2, *memory3;
 	// allocate 64K memory
@@ -96,6 +300,7 @@ memoryTesting(void)
 	prints("\n");
 	free(memory1);
 	free(memory3);
+	
 	//~ memory1 = zalloc(1*MEM_TEST_VAL);
 	
 	u32 timerVal;
@@ -122,6 +327,7 @@ memoryTesting(void)
 	timerVal = readSysTimerVal(0);
 	//~ memory2 = zalloc(1*MEM_TEST_VAL);
 	printWord(-readSysTimerVal(timerVal));
+	#endif
 	prints("\n");
 	
 	#if 0
