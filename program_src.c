@@ -348,18 +348,6 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 		outputSound();
 		return out;
 	}
-
-	}
-	
-	"hello-core1" {
-		helper_unlock();
-		return out;
-	}
-	
-	"sendMsg" {
-		helper_send();
-		return out;
-	}
 	
 	"hello-core1" {
 		helper_unlock();
