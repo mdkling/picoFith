@@ -364,6 +364,16 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 		return out;
 	}
 	
+	"hello-core1" {
+		helper_unlock();
+		return out;
+	}
+	
+	"sendMsg" {
+		helper_send();
+		return out;
+	}
+	
 	*/                               // end of re2c block
 }
 

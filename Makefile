@@ -13,6 +13,7 @@ LOCAL_TOOL_PATH =
 DRIVE ?= d
 UF2_TARGET_DIR = /mnt/$(DRIVE)
 
+
 all : program.uf2 
 
 program.uf2 : program.elf picoUF2
