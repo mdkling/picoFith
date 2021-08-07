@@ -349,9 +349,6 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 		return out;
 	}
 
-	"play-wave" {
-		playWaveform();
-		return out;
 	}
 	
 	"hello-core1" {
