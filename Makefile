@@ -6,8 +6,8 @@ XCPU = -mcpu=cortex-m0plus
 AOPS = --warn --fatal-warnings $(XCPU)
 COPS = -Wall -Wno-pointer-sign -Os -ffreestanding $(XCPU)
 LOPS = -nostdlib -nostartfiles
-LOCAL_TOOL_PATH = ../tool/gcc-arm-none-eabi/bin/
-#~ LOCAL_TOOL_PATH = 
+#~ LOCAL_TOOL_PATH = ../tool/gcc-arm-none-eabi/bin/
+LOCAL_TOOL_PATH = 
 
 # Windows Drive Letter (eg: D:\ == d)
 DRIVE ?= d
