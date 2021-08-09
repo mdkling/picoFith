@@ -31,15 +31,15 @@ parseWord(u8 *out, u8 *start, u8 *YYCURSOR)
 		prints("\" is not defined.\n");
 	} else {
 		u32 rawVal = (u32)retNode->value;
-		if((u8*)rawVal==fls.currentFunctionOut){rawVal+=fls.numLocalVars<<28;}
+		if((u8*)rawVal==fls.currentFunctionOut){rawVal+=fls.numLocalVars<<27;}
 		prints("num locals for call ");
-		printWord((rawVal>>28));
+		printWord((rawVal>>27));
 		prints("\n");
 		if (rawVal>>31 == 0) // WORD_FUNCTION
 		{
-			u8  *startOfFunc = (u8*)(((rawVal<<4)>>4)+0x20000000);
+			u8  *startOfFunc = (u8*)(((rawVal<<5)>>5)+0x20000000);
 			s32 difference = startOfFunc - (out + 3);
-			*out++ = fithCallFunc0 + (rawVal>>28);
+			*out++ = fithCallFunc0 + (rawVal>>27);
 			*out++ = difference & 0xFF;
 			*out++ = (difference>>8) & 0xFF;
 		} else if (rawVal>>31 == 1) { // WORD_GLOBAL_VAR
@@ -53,7 +53,7 @@ parseWord(u8 *out, u8 *start, u8 *YYCURSOR)
 static void
 parseWordDefinition(u8 *out, u8 *start, u8 *YYCURSOR)
 {
-	void *functionStart = (void*)(((u32)out<<4)>>4);
+	void *functionStart = (void*)(((u32)out<<5)>>5);
 	avlNode *retNode = avl_insert(
 		&fls.wordTreeRoot,   // pointer memory holding address of tree
 		start,     // pointer to string
@@ -210,8 +210,8 @@ parseCloseBlock(u8 *out)
 		// pack number of locals into address
 		avlNode *retNode=(void*)fls.blockStack[fls.blockStackIndex].savedCursor;
 		u32 rawVal = (u32)retNode->value;
-		rawVal = (rawVal<<4)>>4;
-		rawVal += fls.numLocalVars << 28;
+		rawVal = (rawVal<<5)>>5;
+		rawVal += fls.numLocalVars << 27;
 		retNode->value = (void*)rawVal;
 		// set we are not in a function anymore
 		fls.insideFunction = 0;

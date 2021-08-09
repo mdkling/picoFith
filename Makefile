@@ -44,7 +44,7 @@ memory.o : memory.c Makefile
 avl.o : avl.c Makefile
 	$(LOCAL_TOOL_PATH)$(ARMGNU)-gcc $(COPS) -mthumb -c avl.c -o avl.o
 
-program.c: program_src.c Makefile parser.c pio.c helperCpu.c
+program.c: program_src.c Makefile parser.c pio.c helperCpu.c random.c
 	re2c -W -i -s program_src.c -o program.c
 
 $(UF2_TARGET_DIR):

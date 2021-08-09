@@ -81,7 +81,7 @@ enum {
 	fithStoreLocal5,
 	fithStoreLocal6,
 	fithStoreLocal7,
-	
+	fithRandom,
 	
 	
 	
@@ -289,6 +289,7 @@ writeInteger(u8 *out, u32 val)
 #include "parser.c"
 #include "pio.c"
 #include "helperCpu.c"
+#include "random.c"
 
 void
 configPioAsm(void);
@@ -383,6 +384,11 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	
 	"over" {
 		*out++ = fithOver;
+		return out;
+	}
+	
+	"random" {
+		*out++ = fithRandom;
 		return out;
 	}
 	

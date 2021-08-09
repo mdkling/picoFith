@@ -819,6 +819,7 @@ fithVMjumpTable:
 .word fithStoreLocal5
 .word fithStoreLocal6
 .word fithStoreLocal7
+.word fithRandom
 
 
 .balign 4
@@ -975,50 +976,42 @@ fithReturn0:
 .thumb_func
 fithReturn1:
 	add  sp, #4
-	POP_IP
-	NEXT_INSTRUCTION
+	b    fithReturn0
 
 .thumb_func
 fithReturn2:
 	add  sp, #8
-	POP_IP
-	NEXT_INSTRUCTION
+	b    fithReturn0
 
 .thumb_func
 fithReturn3:
 	add  sp, #12
-	POP_IP
-	NEXT_INSTRUCTION
+	b    fithReturn0
 
 .thumb_func
 fithReturn4:
 	add  sp, #16
-	POP_IP
-	NEXT_INSTRUCTION
+	b    fithReturn0
 
 .thumb_func
 fithReturn5:
 	add  sp, #20
-	POP_IP
-	NEXT_INSTRUCTION
+	b    fithReturn0
 
 .thumb_func
 fithReturn6:
 	add  sp, #24
-	POP_IP
-	NEXT_INSTRUCTION
+	b    fithReturn0
 
 .thumb_func
 fithReturn7:
 	add  sp, #28
-	POP_IP
-	NEXT_INSTRUCTION
+	b    fithReturn0
 
 .thumb_func
 fithReturn8:
 	add  sp, #32
-	POP_IP
-	NEXT_INSTRUCTION
+	b    fithReturn0
 
 .thumb_func
 fithCallFunc0:
@@ -1035,106 +1028,42 @@ fithCallFunc0:
 .thumb_func
 fithCallFunc1:
 	sub  sp, #4
-	ldrb r2, [r5, #1]
-	ldrb r1, [r5, #2]
-	lsls r1, 8
-	adds r2, r1
-	sxth r2, r2
-	adds r5, 3
-	PUSH_IP
-	adds r5, r2
-	NEXT_INSTRUCTION
+	b    fithCallFunc0
 
 .thumb_func
 fithCallFunc2:
 	sub  sp, #8
-	ldrb r2, [r5, #1]
-	ldrb r1, [r5, #2]
-	lsls r1, 8
-	adds r2, r1
-	sxth r2, r2
-	adds r5, 3
-	PUSH_IP
-	adds r5, r2
-	NEXT_INSTRUCTION
+	b    fithCallFunc0
 
 .thumb_func
 fithCallFunc3:
 	sub  sp, #12
-	ldrb r2, [r5, #1]
-	ldrb r1, [r5, #2]
-	lsls r1, 8
-	adds r2, r1
-	sxth r2, r2
-	adds r5, 3
-	PUSH_IP
-	adds r5, r2
-	NEXT_INSTRUCTION
+	b    fithCallFunc0
 
 .thumb_func
 fithCallFunc4:
 	sub  sp, #16
-	ldrb r2, [r5, #1]
-	ldrb r1, [r5, #2]
-	lsls r1, 8
-	adds r2, r1
-	sxth r2, r2
-	adds r5, 3
-	PUSH_IP
-	adds r5, r2
-	NEXT_INSTRUCTION
+	b    fithCallFunc0
 
 .thumb_func
 fithCallFunc5:
 	sub  sp, #20
-	ldrb r2, [r5, #1]
-	ldrb r1, [r5, #2]
-	lsls r1, 8
-	adds r2, r1
-	sxth r2, r2
-	adds r5, 3
-	PUSH_IP
-	adds r5, r2
-	NEXT_INSTRUCTION
+	b    fithCallFunc0
 
 .thumb_func
 fithCallFunc6:
 	sub  sp, #24
-	ldrb r2, [r5, #1]
-	ldrb r1, [r5, #2]
-	lsls r1, 8
-	adds r2, r1
-	sxth r2, r2
-	adds r5, 3
-	PUSH_IP
-	adds r5, r2
-	NEXT_INSTRUCTION
+	b    fithCallFunc0
 
 .thumb_func
 fithCallFunc7:
 	sub  sp, #28
-	ldrb r2, [r5, #1]
-	ldrb r1, [r5, #2]
-	lsls r1, 8
-	adds r2, r1
-	sxth r2, r2
-	adds r5, 3
-	PUSH_IP
-	adds r5, r2
-	NEXT_INSTRUCTION
+	b    fithCallFunc0
 
 .thumb_func
 fithCallFunc8:
 	sub  sp, #32
-	ldrb r2, [r5, #1]
-	ldrb r1, [r5, #2]
-	lsls r1, 8
-	adds r2, r1
-	sxth r2, r2
-	adds r5, 3
-	PUSH_IP
-	adds r5, r2
-	NEXT_INSTRUCTION
+	b    fithCallFunc0
 
 .thumb_func
 fithDiv:
@@ -1472,56 +1401,47 @@ fithStoreLocal0:
 	;@~ movs r0, '\n'
 	;@~ bl   print1Byte
 	;@~ pop  {r0}
-	POP_TOS
-	adds r5, 1
-	NEXT_INSTRUCTION
+	b    fithDrop
 
 .thumb_func
 fithStoreLocal1:
 	str  r0, [sp, #4]
-	POP_TOS
-	adds r5, 1
-	NEXT_INSTRUCTION
+	b    fithDrop
 
 .thumb_func
 fithStoreLocal2:
 	str  r0, [sp, #8]
-	POP_TOS
-	adds r5, 1
-	NEXT_INSTRUCTION
+	b    fithDrop
 
 .thumb_func
 fithStoreLocal3:
 	str  r0, [sp, #12]
-	POP_TOS
-	adds r5, 1
-	NEXT_INSTRUCTION
+	b    fithDrop
 
 .thumb_func
 fithStoreLocal4:
 	str  r0, [sp, #16]
-	POP_TOS
-	adds r5, 1
-	NEXT_INSTRUCTION
+	b    fithDrop
 
 .thumb_func
 fithStoreLocal5:
 	str  r0, [sp, #20]
-	POP_TOS
-	adds r5, 1
-	NEXT_INSTRUCTION
+	b    fithDrop
 
 .thumb_func
 fithStoreLocal6:
 	str  r0, [sp, #24]
-	POP_TOS
-	adds r5, 1
-	NEXT_INSTRUCTION
+	b    fithDrop
 
 .thumb_func
 fithStoreLocal7:
 	str  r0, [sp, #28]
-	POP_TOS
+	b    fithDrop
+
+.thumb_func
+fithRandom:
+	PUSH_TOS
+	bl   random32
 	adds r5, 1
 	NEXT_INSTRUCTION
 
