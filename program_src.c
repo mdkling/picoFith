@@ -408,6 +408,11 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 		outputSound();
 		return out;
 	}
+
+	"play-sound" {
+		playSound(squareData[]);
+		return out;
+	}
 	
 	"hello-core1" {
 		helper_unlock();
