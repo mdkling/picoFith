@@ -291,7 +291,7 @@ writeInteger(u8 *out, u32 val)
 #include "helperCpu.c"
 #include "random.c"
 
-void
+extern void
 configPioAsm(void);
 
 static u8*
@@ -410,7 +410,8 @@ builtInWords(u8 *out, u8 *YYCURSOR)
 	}
 
 	"play-sound" {
-		playSound(squareData[]);
+		playSound(soundData);
+		playSound(squareData);
 		return out;
 	}
 	

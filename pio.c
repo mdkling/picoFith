@@ -36,6 +36,7 @@ u32 pioInstructions[] =  {
 
 bool pioConfigured = false;
 
+
 void
 configPIO(void)
 {
@@ -149,28 +150,28 @@ outputSound(void)
 	outputFifo = (u32*)PIO_0_SM0_TX;
 	deviceCtrl = (u32*)PIO_0_SM0_INSTR;
 	*deviceCtrl = 0x0007, // entry point
-	deviceCtrl = (u32*)PIO_0_FIFOSTATUS;
-	printWord(*deviceCtrl);
-	printWord(readFifoStatus());
-	prints("\n");
-	writeSound(soundData[0]);
-	printWord(readFifoStatus());
-	prints("\n");
-	writeSound(soundData[1]);
-	printWord(readFifoStatus());
-	prints("\n");
-	writeSound(soundData[2]);
-	printWord(readFifoStatus());
-	prints("\n");
-	writeSound(soundData[3]);
-	printWord(readFifoStatus());
-	prints("\n");
-	writeSound(soundData[4]);
-	printWord(readFifoStatus());
-	prints("\n");
-	writeSound(soundData[5]);
-	printWord(readFifoStatus());
-	prints("\n");
+	//deviceCtrl = (u32*)PIO_0_FIFOSTATUS;
+	//printWord(*deviceCtrl);
+	//printWord(readFifoStatus());
+	//prints("\n");
+	//writeSound(soundData[0]);
+	//printWord(readFifoStatus());
+	//prints("\n");
+	//writeSound(soundData[1]);
+	//printWord(readFifoStatus());
+	//prints("\n");
+	//writeSound(soundData[2]);
+	//printWord(readFifoStatus());
+	//prints("\n");
+	//writeSound(soundData[3]);
+	//printWord(readFifoStatus());
+	//prints("\n");
+	//writeSound(soundData[4]);
+	//printWord(readFifoStatus());
+	//prints("\n");
+	//writeSound(soundData[5]);
+	//printWord(readFifoStatus());
+	//prints("\n");
 	
 	deviceCtrl = (u32*)PIO_0_SM0_INSTRADDR;
 	printWord(*deviceCtrl);
@@ -203,12 +204,17 @@ playSound( u32 soundFile[] )
 	
 	// initialize FIFO
 	volatile u32 *outputFifo;
+	volatile u32 *deviceCtrl;
+	
 	outputFifo = (u32*)PIO_0_SM0_TX;
+
+	deviceCtrl = (u32*)PIO_0_SM0_INSTR;
+	*deviceCtrl = 0x0007; // entry point
 
 	// calculate number of elements in target array
 	//int length = sizeof soundFile / sizeof *soundFile;
 
-	int count = 10000;
+	int count = 100000;
 	
 	prints("begin playing\n");
 	while (count > 0)
@@ -218,7 +224,7 @@ playSound( u32 soundFile[] )
 		*outputFifo = soundFile[count&0xF];
 		count--;
 	}
-	prints("finished playingi\n");
+	prints("finished playing\n");
 
 }
 
